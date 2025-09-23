@@ -1,328 +1,185 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ar">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>FreeCell - لعبة ورق</title>
+  <meta charset="UTF-8">
+  <title>FreeCell - نسخة ويب</title>
   <style>
-    :root{--bg:#0b3;}
-    body{font-family: system-ui, Arial; background:#0b2e1f; color:#fff; margin:0; padding:18px; direction:rtl}
-    header{display:flex;gap:12px;align-items:center;margin-bottom:12px}
-    h1{font-size:18px;margin:0}
-    .controls button{margin-left:8px;padding:8px 12px;border-radius:8px;border:none;background:#165;cursor:pointer}
-    .board{display:grid;grid-template-columns:repeat(8,1fr);gap:10px}
-    .top-row{grid-column:span 8;display:flex;gap:10px;margin-bottom:10px}
-    .area{background:transparent;min-height:100px;border-radius:8px;padding:6px;display:flex;gap:6px}
-    .freecell,.foundation{display:flex;gap:6px}
-    .pile{width:140px;min-height:160px;background:linear-gradient(180deg,#0d1 10%,#063 100%);border-radius:8px;padding:6px}
-    .cell{width:84px;height:120px;border-radius:6px;background:linear-gradient(180deg,#fff,#eee);display:flex;align-items:center;justify-content:center}
-    .empty{opacity:0.15;border:2px dashed rgba(255,255,255,0.2)}
-    img.card{width:84px;height:120px;user-select:none;border-radius:6px}
-    .cascade{min-height:160px;padding:6px}
-    .card-stack{position:relative}
-    .card-stack img{position:absolute;left:0;right:0}
-    .hint{outline:4px solid gold}
-    footer{margin-top:12px;font-size:13px;opacity:0.9}
+    body {
+      background-color: #064420;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    h1 {
+      margin: 10px;
+    }
+    #controls {
+      margin: 10px;
+    }
+    button {
+      margin: 5px;
+      padding: 8px 15px;
+      border: none;
+      border-radius: 5px;
+      background-color: #1b4332;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #2d6a4f;
+    }
+    #game {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 10px;
+    }
+    #top-row, #bottom-row {
+      display: flex;
+      justify-content: center;
+      margin: 10px;
+    }
+    .pile {
+      width: 80px;
+      height: 120px;
+      border: 1px dashed rgba(255,255,255,0.4);
+      border-radius: 8px;
+      margin: 5px;
+      position: relative;
+    }
+    .card {
+      width: 80px;
+      height: 120px;
+      border-radius: 8px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      user-select: none;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>FreeCell - نسخة ويب</h1>
-      <div style="font-size:13px;margin-top:6px">اسحب أو اضغط على الكروت. يوجد Restart / Undo / Hint</div>
+  <h1>لعبة FreeCell</h1>
+  <div id="controls">
+    <button onclick="restartGame()">إعادة تشغيل</button>
+    <button onclick="undoMove()">تراجع (Undo)</button>
+    <button onclick="showHint()">تلميح (Hint)</button>
+  </div>
+  <div id="game">
+    <div id="top-row">
+      <div id="freecells" style="display:flex;"></div>
+      <div id="foundations" style="display:flex; margin-left:50px;"></div>
     </div>
-    <div class="controls" style="margin-inline-start:auto">
-      <button id="restartBtn">إعادة تشغيل</button>
-      <button id="undoBtn">تراجع (Undo)</button>
-      <button id="hintBtn">تلميح (Hint)</button>
+    <div id="bottom-row">
+      <div id="tableau" style="display:flex;"></div>
     </div>
-  </header>
-
-  <main>
-    <div class="top-row">
-      <div class="area freecell" id="freecells">
-        <!-- 4 free cells -->
-      </div>
-      <div style="flex:1"></div>
-      <div class="area foundation" id="foundations">
-        <!-- 4 foundations -->
-      </div>
-    </div>
-
-    <div class="board" id="cascades">
-      <!-- 8 cascades -->
-    </div>
-  </main>
-
-  <footer>
-    <div>ملاحظات: ضع مجلد <code>Cards</code> بجانب هذا الملف. أسماء ملفات البطاقات يجب أن تكون: <strong>RS.jpg</strong> حيث R=الرتبة (A,2..10,J,Q,K) وS=الحرف: S (spades), H (hearts), D (diamonds), C (clubs). مثال: <em>AS.jpg</em> ، <em>10H.jpg</em>.</div>
-  </footer>
+  </div>
 
   <script>
-    const ranks = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-    const suits = ['S','H','D','C'];
+    const ranks = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+    const suits = ["S","H","D","C"]; // Spades, Hearts, Diamonds, Clubs
 
-    let freecells = [null,null,null,null];
-    let foundations = {S:[],H:[],D:[],C:[]};
-    let cascades = Array.from({length:8},()=>[]);
-    let undoStack = [];
+    let gameState = { tableau: [], freecells: [], foundations: [], history: [] };
 
-    const freecellsEl = document.getElementById('freecells');
-    const foundationsEl = document.getElementById('foundations');
-    const cascadesEl = document.getElementById('cascades');
-    const restartBtn = document.getElementById('restartBtn');
-    const undoBtn = document.getElementById('undoBtn');
-    const hintBtn = document.getElementById('hintBtn');
-
-    function cardColor(suit){ return (suit === 'H' || suit === 'D') ? 'red' : 'black'; }
-    function cardId(card){ return card.rank + card.suit; }
-
-    function makeDeck(){
-      const deck = [];
-      for(const s of suits) for(const r of ranks) deck.push({rank:r,suit:s});
-      return deck;
+    function cardId(card) {
+      return card.rank + card.suit;
     }
 
-    function shuffle(a){
-      for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] }
-    }
-
-    function deal(){
-      const d = makeDeck(); shuffle(d);
-      freecells = [null,null,null,null];
-      foundations = {S:[],H:[],D:[],C:[]};
-      cascades = Array.from({length:8},()=>[]);
-      let i=0; while(d.length) cascades[i++%8].push(d.shift());
-      undoStack = [];
-      render();
-    }
-
-    function createCardImg(card){
+    function createCardImg(card) {
       const img = document.createElement('img');
       img.className = 'card';
-      const fname = `Cards/${card.rank}${card.suit}.jpg`;
-      img.src = fname;
-      img.draggable = false;
+      img.src = `Cards/${card.rank}${card.suit}.jpg`;
       img.dataset.id = cardId(card);
+      img.draggable = false;
       return img;
     }
 
-    function clearEl(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+    function initDeck() {
+      let deck = [];
+      for (let r of ranks) {
+        for (let s of suits) {
+          deck.push({rank:r, suit:s});
+        }
+      }
+      // Shuffle
+      for (let i=deck.length-1;i>0;i--) {
+        const j=Math.floor(Math.random()*(i+1));
+        [deck[i],deck[j]]=[deck[j],deck[i]];
+      }
+      return deck;
+    }
+
+    function restartGame(){
+      const deck = initDeck();
+      gameState.tableau = [[],[],[],[],[],[],[],[]];
+      for (let i=0;i<deck.length;i++){
+        gameState.tableau[i%8].push(deck[i]);
+      }
+      gameState.freecells = [null,null,null,null];
+      gameState.foundations = [[],[],[],[]];
+      gameState.history = [];
+      render();
+    }
+
+    function undoMove(){
+      if (gameState.history.length>0){
+        gameState = gameState.history.pop();
+        render();
+      }
+    }
+
+    function showHint(){
+      alert("التلميحات لم تُنفذ بعد 🙂");
+    }
 
     function render(){
-      clearEl(freecellsEl);
-      freecells.forEach((c,i)=>{
-        const slot = document.createElement('div'); slot.className='cell pile';
-        slot.dataset.type = 'freecell'; slot.dataset.index = i;
-        if(c){ const img=createCardImg(c); slot.appendChild(img); }
-        else slot.classList.add('empty');
-        freecellsEl.appendChild(slot);
-      });
+      const freeDiv = document.getElementById('freecells');
+      const foundDiv = document.getElementById('foundations');
+      const tabDiv = document.getElementById('tableau');
+      freeDiv.innerHTML = "";
+      foundDiv.innerHTML = "";
+      tabDiv.innerHTML = "";
 
-      clearEl(foundationsEl);
-      ['S','H','D','C'].forEach(s=>{
-        const slot = document.createElement('div'); slot.className='cell pile';
-        slot.dataset.type='foundation'; slot.dataset.suit = s;
-        const top = foundations[s].slice(-1)[0];
-        if(top){ slot.appendChild(createCardImg(top)); }
-        else slot.classList.add('empty');
-        foundationsEl.appendChild(slot);
-      });
+      // Freecells
+      for (let i=0;i<4;i++){
+        const slot=document.createElement('div');
+        slot.className="pile";
+        if (gameState.freecells[i]){
+          const img=createCardImg(gameState.freecells[i]);
+          slot.appendChild(img);
+        }
+        freeDiv.appendChild(slot);
+      }
 
-      clearEl(cascadesEl);
-      cascades.forEach((stack,ci)=>{
-        const container = document.createElement('div'); container.className='pile cascade'; container.dataset.type='cascade'; container.dataset.index=ci;
-        const stackDiv = document.createElement('div'); stackDiv.className='card-stack';
-        stack.forEach((card,idx)=>{
-          const img = createCardImg(card);
-          img.style.top = (idx*22)+'px';
-          img.dataset.stackIndex = idx;
-          img.dataset.cascade = ci;
-          img.style.position='absolute';
-          img.addEventListener('click', onCardClick);
-          stackDiv.appendChild(img);
+      // Foundations
+      for (let i=0;i<4;i++){
+        const slot=document.createElement('div');
+        slot.className="pile";
+        if (gameState.foundations[i].length>0){
+          const top=gameState.foundations[i][gameState.foundations[i].length-1];
+          const img=createCardImg(top);
+          slot.appendChild(img);
+        }
+        foundDiv.appendChild(slot);
+      }
+
+      // Tableau
+      for (let i=0;i<8;i++){
+        const slot=document.createElement('div');
+        slot.className="pile";
+        gameState.tableau[i].forEach((card,idx)=>{
+          const img=createCardImg(card);
+          img.style.top = (idx*25)+"px";
+          slot.appendChild(img);
         });
-        container.appendChild(stackDiv);
-        cascadesEl.appendChild(container);
-      });
-
-    }
-
-    function canMoveToFoundation(card){
-      const f = foundations[card.suit];
-      if(!f.length) return card.rank==='A';
-      const topRank = f[f.length-1].rank;
-      return nextRank(topRank)===card.rank;
-    }
-    function nextRank(rank){
-      const i = ranks.indexOf(rank); return ranks[i+1];
-    }
-    function prevRank(rank){ const i = ranks.indexOf(rank); return ranks[i-1]; }
-
-    function canPlaceOnCascade(movingCard, destTop){
-      if(!destTop) return true;
-      return cardColor(movingCard.suit)!==cardColor(destTop.suit) && prevRank(destTop.rank)===movingCard.rank;
-    }
-
-    function availableBuildSpaceCount(){
-      const freeCells = freecells.filter(c=>!c).length;
-      const emptyCascades = cascades.filter(c=>c.length===0).length;
-      return (freeCells+1)*(emptyCascades+1);
-    }
-
-    let selected = null;
-
-    function onCardClick(e){
-      const img = e.currentTarget; const ci = Number(img.dataset.cascade); const idx = Number(img.dataset.stackIndex);
-      const pile = cascades[ci];
-      const card = pile[idx];
-      const seq = pile.slice(idx);
-      if(!isValidSequence(seq)) return;
-      const maxLen = availableBuildSpaceCount();
-      if(seq.length>maxLen){ flashHint('لا يمكن نقل هذا التسلسل — المساحة غير كافية'); return; }
-      selected = {type:'cascade',from:ci, index:idx, cards:seq};
-      clearHints();
-      img.closest('.pile').classList.add('hint');
-      attachTargets();
-    }
-
-    function isValidSequence(seq){
-      for(let i=0;i<seq.length-1;i++){
-        if(cardColor(seq[i].suit)===cardColor(seq[i+1].suit)) return false;
-        if(nextRank(seq[i].rank)!==seq[i+1].rank) return false;
-      }
-      return true;
-    }
-
-    function attachTargets(){
-      document.querySelectorAll('.pile').forEach(p=>{
-        p.addEventListener('click', onTargetClick);
-        p.classList.add('hint');
-      });
-    }
-    function detachTargets(){
-      document.querySelectorAll('.pile').forEach(p=>{
-        p.removeEventListener('click', onTargetClick);
-        p.classList.remove('hint');
-      });
-    }
-
-    function onTargetClick(e){
-      const target = e.currentTarget;
-      if(!selected) return;
-      const from = selected.from;
-      const cards = selected.cards;
-      const ttype = target.dataset.type;
-      if(ttype==='freecell'){
-        const idx = Number(target.dataset.index);
-        if(freecells[idx]){ flashHint('الخلية مشغولة'); return; }
-        if(cards.length>1){ flashHint('لا يمكن نقل أكثر من بطاقة إلى الخلية'); return; }
-        pushUndo();
-        freecells[idx] = cards[0];
-        cascades[from].splice(selected.index);
-        selected=null; detachTargets(); render();
-        return;
-      }
-      if(ttype==='foundation'){
-        const s = target.dataset.suit;
-        if(cards.length>1){ flashHint('لا يمكن نقل أكثر من بطاقة إلى الخانة (foundation)'); return; }
-        if(cards[0].suit!==s){ flashHint('لا يمكن وضع بطاقة بلون مختلف في الخانة هذه'); return; }
-        if(!canMoveToFoundation(cards[0])){ flashHint('لا يمكن وضعها في الخانة'); return; }
-        pushUndo();
-        foundations[s].push(cards[0]);
-        cascades[from].splice(selected.index);
-        selected=null; detachTargets(); render();
-        checkWin();
-        return;
-      }
-      if(ttype==='cascade'){
-        const destIdx = Number(target.dataset.index);
-        const dest = cascades[destIdx];
-        const destTop = dest[dest.length-1];
-        if(!canPlaceOnCascade(cards[0], destTop)){ flashHint('لا يمكن وضع التسلسل هنا'); return; }
-        const maxLen = availableBuildSpaceCount();
-        if(cards.length>maxLen){ flashHint('المكان غير كافٍ لنقل هذا العدد من البطاقات'); return; }
-        pushUndo();
-        cascades[destIdx] = cascades[destIdx].concat(cards);
-        cascades[from].splice(selected.index);
-        selected=null; detachTargets(); render();
-        return;
+        tabDiv.appendChild(slot);
       }
     }
 
-    function pushUndo(){
-      undoStack.push(JSON.stringify({freecells,foundations,cascades}));
-      if(undoStack.length>200) undoStack.shift();
-    }
-    function doUndo(){
-      if(!undoStack.length) { flashHint('لا يوجد خطوات للتراجع'); return; }
-      const snap = JSON.parse(undoStack.pop());
-      freecells = snap.freecells; foundations = snap.foundations; cascades = snap.cascades;
-      selected=null; detachTargets(); render();
-    }
-
-    function restart(){ if(confirm('هل تريد إعادة تشغيل اللعبة؟')) deal(); }
-
-    function flashHint(msg){
-      const old = document.querySelector('.flash'); if(old) old.remove();
-      const d = document.createElement('div'); d.className='flash'; d.textContent=msg; d.style.position='fixed'; d.style.left='50%'; d.style.top='20px'; d.style.transform='translateX(-50%)'; d.style.background='rgba(0,0,0,0.6)'; d.style.padding='8px 12px'; d.style.borderRadius='8px'; document.body.appendChild(d);
-      setTimeout(()=>d.remove(),2000);
-    }
-
-    function clearHints(){ document.querySelectorAll('.hint').forEach(el=>el.classList.remove('hint')); }
-
-    function giveHint(){
-      clearHints();
-      for(let ci=0;ci<cascades.length;ci++){
-        const pile = cascades[ci]; if(!pile.length) continue;
-        const card = pile[pile.length-1];
-        if(canMoveToFoundation(card)){
-          const src = document.querySelector(`.cascade[data-index=\"${ci}\"] .card-stack img[data-stack-index=\"${pile.length-1}\"]`);
-          const tgt = Array.from(document.querySelectorAll('.pile')).find(p=>p.dataset.type==='foundation' && p.dataset.suit===card.suit);
-          if(src) src.classList.add('hint'); if(tgt) tgt.classList.add('hint');
-          return;
-        }
-      }
-      for(let ci=0;ci<cascades.length;ci++){
-        const pile = cascades[ci]; if(!pile.length) continue;
-        const card = pile[pile.length-1];
-        const freeIdx = freecells.findIndex(c=>!c);
-        if(freeIdx!==-1){
-          const src = document.querySelector(`.cascade[data-index=\"${ci}\"] .card-stack img[data-stack-index=\"${pile.length-1}\"]`);
-          const tgt = document.querySelector(`.cell.pile[data-type=\"freecell\"][data-index=\"${freeIdx}\"]`);
-          if(src) src.classList.add('hint'); if(tgt) tgt.classList.add('hint');
-          return;
-        }
-      }
-      for(let ci=0;ci<cascades.length;ci++){
-        const pile = cascades[ci];
-        for(let i=0;i<pile.length;i++){
-          const seq = pile.slice(i);
-          if(!isValidSequence(seq)) break;
-          for(let dj=0;dj<cascades.length;dj++){ if(dj===ci) continue;
-            const destTop = cascades[dj][cascades[dj].length-1];
-            if(canPlaceOnCascade(seq[0], destTop) && seq.length<=availableBuildSpaceCount()){
-              const src = document.querySelector(`.cascade[data-index=\"${ci}\"] .card-stack img[data-stack-index=\"${i}\"]`);
-              const tgt = document.querySelector(`.cascade[data-index=\"${dj}\"]`);
-              if(src) src.classList.add('hint'); if(tgt) tgt.classList.add('hint');
-              return;
-            }
-          }}
-      }
-      flashHint('لم يتم العثور على اقتراح حالي');
-    }
-
-    function checkWin(){
-      const total = Object.values(foundations).reduce((a,b)=>a+b.length,0);
-      if(total===52) alert('مبروك — فزت!');
-    }
-
-    restartBtn.addEventListener('click',()=>{ restart(); });
-    undoBtn.addEventListener('click',()=>{ doUndo(); });
-    hintBtn.addEventListener('click',()=>{ clearHints(); giveHint(); });
-
-    function createPlaceholders(){
-      clearEl(freecellsEl);
-      for(let i=0;i<4;i++){ const div=document.createElement('div'); div.className='cell pile empty'; div.dataset.type='freecell'; div.dataset.index=i; freecellsEl.appendChild(div); }
-      clearEl(foundationsEl);
-      ['S','H','D','C'].forEach(s=>{ const div=document.createElement('div'); div.className='cell pile empty'; div.dataset.type='foundation'; div.dataset.s
+    restartGame();
+  </script>
+</body>
+</html>
