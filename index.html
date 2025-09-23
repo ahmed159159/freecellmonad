@@ -55,23 +55,18 @@
   </main>
 
   <footer>
-    <div>ملاحظات: ضع مجلد الصور بجانب هذا الملف. أسماء ملفات البطاقات يجب أن تكون: <strong>RS.png</strong> حيث R=الرتبة (A,2..10,J,Q,K) وS=الحرف: S (spades), H (hearts), D (diamonds), C (clubs). مثال: <em>AS.png</em> ، <em>10H.png</em>.</div>
+    <div>ملاحظات: ضع مجلد <code>Cards</code> بجانب هذا الملف. أسماء ملفات البطاقات يجب أن تكون: <strong>RS.jpg</strong> حيث R=الرتبة (A,2..10,J,Q,K) وS=الحرف: S (spades), H (hearts), D (diamonds), C (clubs). مثال: <em>AS.jpg</em> ، <em>10H.jpg</em>.</div>
   </footer>
 
   <script>
-    // Simple FreeCell implementation (single-file)
-    // المهم: توقع أن صور البطاقات موجودة في نفس المجلد واسمها مثل "AS.png" أو "10H.png"
-
     const ranks = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
     const suits = ['S','H','D','C'];
 
-    // Game state
     let freecells = [null,null,null,null];
     let foundations = {S:[],H:[],D:[],C:[]};
     let cascades = Array.from({length:8},()=>[]);
     let undoStack = [];
 
-    // DOM refs
     const freecellsEl = document.getElementById('freecells');
     const foundationsEl = document.getElementById('foundations');
     const cascadesEl = document.getElementById('cascades');
@@ -79,7 +74,6 @@
     const undoBtn = document.getElementById('undoBtn');
     const hintBtn = document.getElementById('hintBtn');
 
-    // Helpers
     function cardColor(suit){ return (suit === 'H' || suit === 'D') ? 'red' : 'black'; }
     function cardId(card){ return card.rank + card.suit; }
 
@@ -95,26 +89,20 @@
 
     function deal(){
       const d = makeDeck(); shuffle(d);
-      // clear
       freecells = [null,null,null,null];
       foundations = {S:[],H:[],D:[],C:[]};
       cascades = Array.from({length:8},()=>[]);
-      // deal round-robin
       let i=0; while(d.length) cascades[i++%8].push(d.shift());
       undoStack = [];
       render();
     }
 
-    // Rendering
     function createCardImg(card){
       const img = document.createElement('img');
       img.className = 'card';
-      // try both filename styles: 'AS.png' and 'AS 1S.png' by encoding
-      const fname1 = `${card.rank}${card.suit}.png`;
-      const fname2 = `${card.rank}${card.suit} 1${card.suit}.png`;
-      img.src = fname1;
-      img.onerror = ()=>{ img.onerror = null; img.src = fname2; };
-      img.draggable = false; // we'll implement our own drag
+      const fname = `Cards/${card.rank}${card.suit}.jpg`;
+      img.src = fname;
+      img.draggable = false;
       img.dataset.id = cardId(card);
       return img;
     }
@@ -122,7 +110,6 @@
     function clearEl(el){ while(el.firstChild) el.removeChild(el.firstChild); }
 
     function render(){
-      // freecells
       clearEl(freecellsEl);
       freecells.forEach((c,i)=>{
         const slot = document.createElement('div'); slot.className='cell pile';
@@ -132,7 +119,6 @@
         freecellsEl.appendChild(slot);
       });
 
-      // foundations
       clearEl(foundationsEl);
       ['S','H','D','C'].forEach(s=>{
         const slot = document.createElement('div'); slot.className='cell pile';
@@ -143,7 +129,6 @@
         foundationsEl.appendChild(slot);
       });
 
-      // cascades
       clearEl(cascadesEl);
       cascades.forEach((stack,ci)=>{
         const container = document.createElement('div'); container.className='pile cascade'; container.dataset.type='cascade'; container.dataset.index=ci;
@@ -163,7 +148,6 @@
 
     }
 
-    // Moves & rules
     function canMoveToFoundation(card){
       const f = foundations[card.suit];
       if(!f.length) return card.rank==='A';
@@ -177,33 +161,28 @@
 
     function canPlaceOnCascade(movingCard, destTop){
       if(!destTop) return true;
-      // must be opposite color and rank one less than destTop
       return cardColor(movingCard.suit)!==cardColor(destTop.suit) && prevRank(destTop.rank)===movingCard.rank;
     }
 
     function availableBuildSpaceCount(){
       const freeCells = freecells.filter(c=>!c).length;
       const emptyCascades = cascades.filter(c=>c.length===0).length;
-      // formula: (free cells + 1) * (2^empty cascades) is for moving sequences; simpler: max sequence = freeCells + 1 times (2^numEmpty) but we'll use conservative: (freeCells+1)*(emptyCascades+1)
       return (freeCells+1)*(emptyCascades+1);
     }
 
-    // Click-to-select implementation
-    let selected = null; // {type, fromIndex, cardIndex, cardObj}
+    let selected = null;
 
     function onCardClick(e){
       const img = e.currentTarget; const ci = Number(img.dataset.cascade); const idx = Number(img.dataset.stackIndex);
       const pile = cascades[ci];
       const card = pile[idx];
-      // allow selecting sequences only if they form a proper down-alternating build and length <= availableBuildSpaceCount()
       const seq = pile.slice(idx);
-      if(!isValidSequence(seq)) return; // can't select
+      if(!isValidSequence(seq)) return;
       const maxLen = availableBuildSpaceCount();
       if(seq.length>maxLen){ flashHint('لا يمكن نقل هذا التسلسل — المساحة غير كافية'); return; }
       selected = {type:'cascade',from:ci, index:idx, cards:seq};
       clearHints();
       img.closest('.pile').classList.add('hint');
-      // second click elsewhere handled by clicking targets
       attachTargets();
     }
 
@@ -216,7 +195,6 @@
     }
 
     function attachTargets(){
-      // make freecells, foundations, cascades clickable targets
       document.querySelectorAll('.pile').forEach(p=>{
         p.addEventListener('click', onTargetClick);
         p.classList.add('hint');
@@ -234,13 +212,11 @@
       if(!selected) return;
       const from = selected.from;
       const cards = selected.cards;
-      // determine destination
       const ttype = target.dataset.type;
       if(ttype==='freecell'){
         const idx = Number(target.dataset.index);
         if(freecells[idx]){ flashHint('الخلية مشغولة'); return; }
         if(cards.length>1){ flashHint('لا يمكن نقل أكثر من بطاقة إلى الخلية'); return; }
-        // perform move
         pushUndo();
         freecells[idx] = cards[0];
         cascades[from].splice(selected.index);
@@ -264,7 +240,6 @@
         const dest = cascades[destIdx];
         const destTop = dest[dest.length-1];
         if(!canPlaceOnCascade(cards[0], destTop)){ flashHint('لا يمكن وضع التسلسل هنا'); return; }
-        // check we can move whole sequence using freecells & empty cascades capacity
         const maxLen = availableBuildSpaceCount();
         if(cards.length>maxLen){ flashHint('المكان غير كافٍ لنقل هذا العدد من البطاقات'); return; }
         pushUndo();
@@ -276,7 +251,6 @@
     }
 
     function pushUndo(){
-      // deep-copy state (conservative)
       undoStack.push(JSON.stringify({freecells,foundations,cascades}));
       if(undoStack.length>200) undoStack.shift();
     }
@@ -297,22 +271,18 @@
 
     function clearHints(){ document.querySelectorAll('.hint').forEach(el=>el.classList.remove('hint')); }
 
-    // Hint algorithm: try simple single-card auto-moves to foundation; else suggest any legal move
     function giveHint(){
       clearHints();
-      // 1) single card from any cascade to foundation
       for(let ci=0;ci<cascades.length;ci++){
         const pile = cascades[ci]; if(!pile.length) continue;
         const card = pile[pile.length-1];
         if(canMoveToFoundation(card)){
-          // highlight source and target
           const src = document.querySelector(`.cascade[data-index=\"${ci}\"] .card-stack img[data-stack-index=\"${pile.length-1}\"]`);
           const tgt = Array.from(document.querySelectorAll('.pile')).find(p=>p.dataset.type==='foundation' && p.dataset.suit===card.suit);
           if(src) src.classList.add('hint'); if(tgt) tgt.classList.add('hint');
           return;
         }
       }
-      // 2) single card to freecell
       for(let ci=0;ci<cascades.length;ci++){
         const pile = cascades[ci]; if(!pile.length) continue;
         const card = pile[pile.length-1];
@@ -324,7 +294,6 @@
           return;
         }
       }
-      // 3) move small sequences to other cascades
       for(let ci=0;ci<cascades.length;ci++){
         const pile = cascades[ci];
         for(let i=0;i<pile.length;i++){
@@ -348,24 +317,12 @@
       if(total===52) alert('مبروك — فزت!');
     }
 
-    // Attach UI
     restartBtn.addEventListener('click',()=>{ restart(); });
     undoBtn.addEventListener('click',()=>{ doUndo(); });
     hintBtn.addEventListener('click',()=>{ clearHints(); giveHint(); });
 
-    // init DOM placeholders (freecells and foundations rely on specific attributes used by script)
     function createPlaceholders(){
-      // freecells
       clearEl(freecellsEl);
       for(let i=0;i<4;i++){ const div=document.createElement('div'); div.className='cell pile empty'; div.dataset.type='freecell'; div.dataset.index=i; freecellsEl.appendChild(div); }
       clearEl(foundationsEl);
-      ['S','H','D','C'].forEach(s=>{ const div=document.createElement('div'); div.className='cell pile empty'; div.dataset.type='foundation'; div.dataset.suit=s; foundationsEl.appendChild(div); });
-      clearEl(cascadesEl);
-      for(let i=0;i<8;i++){ const div=document.createElement('div'); div.className='pile cascade'; div.dataset.type='cascade'; div.dataset.index=i; cascadesEl.appendChild(div); }
-    }
-
-    createPlaceholders(); deal();
-
-  </script>
-</body>
-</html>
+      ['S','H','D','C'].forEach(s=>{ const div=document.createElement('div'); div.className='cell pile empty'; div.dataset.type='foundation'; div.dataset.s
