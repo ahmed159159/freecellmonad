@@ -18,13 +18,15 @@
       width:80px; height:120px;
       border:1px dashed rgba(255,255,255,0.4);
       border-radius:8px; margin:5px; position:relative;
-      background: rgba(255,255,255,0.02);
     }
     .card {
       width:80px; height:120px; border-radius:8px;
-      position:absolute; cursor:grab; user-select:none;
+      position:absolute; cursor:grab;
     }
-    .hint-outline{ outline: 3px solid gold; }
+    .card.selected {
+      outline:2px solid yellow;
+      opacity:0.7;
+    }
   </style>
 </head>
 <body>
@@ -98,61 +100,59 @@ function canPlaceOnFoundation(card,pile){
 function countEmptyFreecells(){ return gameState.freecells.filter(f=>!f).length; }
 function countEmptyTableaus(){ return gameState.tableau.filter(p=>p.length===0).length; }
 function maxMovableCards(){ return (countEmptyFreecells()+1)*Math.pow(2,countEmptyTableaus()); }
-
 function validSequence(cards){
-  // cards[0] is the lower card (closer to the bottom of the moved stack)
-  // for a valid sequence we need: card[i] rank == card[i+1].rank + 1 and opposite color
   for (let i=0;i<cards.length-1;i++){
-    const lower = cards[i];
-    const upper = cards[i+1];
-    const rLower = ranks.indexOf(lower.rank);
-    const rUpper = ranks.indexOf(upper.rank);
-    if (rLower !== rUpper + 1) return false; // not descending by 1
-    if (cardColor(lower.suit) === cardColor(upper.suit)) return false; // same color -> invalid
+    if (!canPlaceOn(cards[i],cards[i+1])) return false;
   }
   return true;
 }
 
 // Drag & Drop
-let draggedCards=[], sourceIdx=null, sourceType=null;
+let draggedCards=[],sourceIdx=null,sourceType=null;
 function dragStart(e){
   const id=e.target.dataset.id;
-  // try tableau (allow stack moves)
+  // clear selection
+  document.querySelectorAll('.card').forEach(c=>c.classList.remove('selected'));
+
+  // from tableau: allow stack
   for (let i=0;i<8;i++){
     const pile=gameState.tableau[i];
     const idx=pile.findIndex(c=>cardId(c)===id);
     if (idx!==-1){
       const moving=pile.slice(idx);
       if (moving.length<=maxMovableCards() && validSequence(moving)){
-        draggedCards = moving.slice(); // copy
-        sourceIdx = i; sourceType = "tableau";
+        draggedCards=moving; sourceIdx=i; sourceType="tableau";
+        moving.forEach(c=>{
+          const el=document.querySelector(`img[data-id='${cardId(c)}']`);
+          if(el) el.classList.add('selected');
+        });
+        // cancel ghost image
+        e.dataTransfer.setDragImage(document.createElement("div"),0,0);
         return;
       } else { draggedCards=[]; return; }
     }
   }
-  // try freecells
+  // from freecell
   for (let i=0;i<4;i++){
-    const c = gameState.freecells[i];
-    if (c && cardId(c)===id){ draggedCards=[c]; sourceIdx=i; sourceType="freecell"; return; }
+    const c=gameState.freecells[i];
+    if (c && cardId(c)===id){ 
+      draggedCards=[c]; sourceIdx=i; sourceType="freecell"; 
+      e.dataTransfer.setDragImage(document.createElement("div"),0,0);
+      return;
+    }
   }
 }
 
 function dropOnTableau(i){
   if (draggedCards.length===0) return;
   const pile=gameState.tableau[i];
-  const target = pile[pile.length-1];
-  if (pile.length===0 || canPlaceOn(draggedCards[0], target)){
+  const target=pile[pile.length-1];
+  if (canPlaceOn(draggedCards[0],target) || pile.length===0){
     saveState();
-    if (sourceType==="tableau"){
-      const srcPile = gameState.tableau[sourceIdx];
-      const removeStart = srcPile.length - draggedCards.length;
-      srcPile.splice(removeStart, draggedCards.length);
-    } else if (sourceType==="freecell"){
-      gameState.freecells[sourceIdx] = null;
-    }
-    gameState.tableau[i] = gameState.tableau[i].concat(draggedCards);
-    draggedCards = [];
-    render();
+    if (sourceType==="tableau"){ gameState.tableau[sourceIdx].splice(-draggedCards.length); }
+    else if (sourceType==="freecell"){ gameState.freecells[sourceIdx]=null; }
+    gameState.tableau[i]=gameState.tableau[i].concat(draggedCards);
+    draggedCards=[]; render();
   }
 }
 
@@ -160,31 +160,23 @@ function dropOnFreecell(i){
   if (draggedCards.length!==1) return;
   if (!gameState.freecells[i]){
     saveState();
-    if (sourceType==="tableau") gameState.tableau[sourceIdx].pop();
+    if (sourceType==="tableau"){ gameState.tableau[sourceIdx].pop(); }
     else if (sourceType==="freecell") return;
-    gameState.freecells[i] = draggedCards[0];
-    draggedCards = [];
-    render();
+    gameState.freecells[i]=draggedCards[0];
+    draggedCards=[]; render();
   }
 }
 
 function dropOnFoundation(i){
   if (draggedCards.length!==1) return;
-  const pile = gameState.foundations[i];
-  if (canPlaceOnFoundation(draggedCards[0], pile)){
+  const pile=gameState.foundations[i];
+  if (canPlaceOnFoundation(draggedCards[0],pile)){
     saveState();
-    if (sourceType==="tableau") gameState.tableau[sourceIdx].pop();
-    else if (sourceType==="freecell") gameState.freecells[sourceIdx] = null;
+    if (sourceType==="tableau"){ gameState.tableau[sourceIdx].pop(); }
+    else if (sourceType==="freecell"){ gameState.freecells[sourceIdx]=null; }
     pile.push(draggedCards[0]);
-    draggedCards = [];
-    render();
+    draggedCards=[]; render();
   }
-}
-
-// ✅ فحص الفوز
-function checkWin(){
-  const total = gameState.foundations.reduce((a,p)=>a+p.length,0);
-  if (total===52){ setTimeout(()=>alert("🎉 مبروك، فزت!"),100); }
 }
 
 // Rendering
@@ -192,43 +184,50 @@ function render(){
   const freeDiv=document.getElementById('freecells');
   const foundDiv=document.getElementById('foundations');
   const tabDiv=document.getElementById('tableau');
-  freeDiv.innerHTML=''; foundDiv.innerHTML=''; tabDiv.innerHTML='';
-
+  freeDiv.innerHTML=""; foundDiv.innerHTML=""; tabDiv.innerHTML="";
   for (let i=0;i<4;i++){
     const slot=document.createElement('div');
-    slot.className='pile'; slot.ondragover = e=>e.preventDefault(); slot.ondrop = ()=>dropOnFreecell(i);
+    slot.className="pile"; slot.ondragover=e=>e.preventDefault();
+    slot.ondrop=()=>dropOnFreecell(i);
     if (gameState.freecells[i]) slot.appendChild(createCardImg(gameState.freecells[i]));
     freeDiv.appendChild(slot);
   }
-
   for (let i=0;i<4;i++){
     const slot=document.createElement('div');
-    slot.className='pile'; slot.ondragover = e=>e.preventDefault(); slot.ondrop = ()=>dropOnFoundation(i);
-    if (gameState.foundations[i].length>0){ const top=gameState.foundations[i][gameState.foundations[i].length-1]; slot.appendChild(createCardImg(top)); }
+    slot.className="pile"; slot.ondragover=e=>e.preventDefault();
+    slot.ondrop=()=>dropOnFoundation(i);
+    if (gameState.foundations[i].length>0){
+      const top=gameState.foundations[i][gameState.foundations[i].length-1];
+      slot.appendChild(createCardImg(top));
+    }
     foundDiv.appendChild(slot);
   }
-
   for (let i=0;i<8;i++){
     const slot=document.createElement('div');
-    slot.className='pile'; slot.ondragover = e=>e.preventDefault(); slot.ondrop = ()=>dropOnTableau(i);
-    gameState.tableau[i].forEach((card,idx)=>{ slot.appendChild(createCardImg(card,idx)); });
+    slot.className="pile"; slot.ondragover=e=>e.preventDefault();
+    slot.ondrop=()=>dropOnTableau(i);
+    gameState.tableau[i].forEach((card,idx)=>{
+      slot.appendChild(createCardImg(card,idx));
+    });
     tabDiv.appendChild(slot);
   }
-
-  checkWin();
 }
 
-// Hint (simple)
+// Hint
 function showHint(){
-  // try any single-card foundation move
   for (let i=0;i<8;i++){
-    const p=gameState.tableau[i]; if (!p.length) continue;
-    const c=p[p.length-1];
-    for (let j=0;j<4;j++){ if (canPlaceOnFoundation(c, gameState.foundations[j])){ alert('يمكن نقل '+cardId(c)+' إلى Foundation '+(j+1)); return; } }
+    const pile=gameState.tableau[i];
+    if (pile.length>0){
+      const c=pile[pile.length-1];
+      for (let j=0;j<4;j++){
+        if (canPlaceOnFoundation(c,gameState.foundations[j])){
+          alert("يمكن نقل "+cardId(c)+" إلى الـ Foundation "+(j+1));
+          return;
+        }
+      }
+    }
   }
-  // try single-card to freecell
-  for (let i=0;i<8;i++){ const p=gameState.tableau[i]; if (!p.length) continue; const c=p[p.length-1]; const freeIdx=gameState.freecells.findIndex(f=>!f); if (freeIdx!==-1){ alert('يمكن نقل '+cardId(c)+' إلى Freecell '+(freeIdx+1)); return; } }
-  alert('لا توجد تلميحات متاحة');
+  alert("لا توجد تلميحات متاحة");
 }
 
 restartGame();
