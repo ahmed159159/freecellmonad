@@ -1,18 +1,19 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>FreeCell - Web</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreeCell Game</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <h1>FreeCell</h1>
-  <div id="controls">
-    <button onclick="restartGame()">إعادة تشغيل</button>
-  </div>
   <div id="game">
+    <div id="freecells"></div>
+    <div id="foundations"></div>
     <div id="columns"></div>
   </div>
+  <button onclick="restartGame()">إعادة تشغيل</button>
 
   <script src="script.js"></script>
 </body>
