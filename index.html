@@ -13,15 +13,63 @@
     }
     button:hover{ background:#2d6a4f; }
     #game { display:flex; flex-direction:column; align-items:center; }
-    #top-row,#bottom-row { display:flex; justify-content:center; margin:10px; }
+    #top-row {
+      display: flex;
+      justify-content: space-between;
+      width: 800px;
+      margin: 10px;
+    }
+    #freecells {
+      display: flex;
+      gap: 8px;
+    }
+    #foundations {
+      display: flex;
+      gap: 8px;
+    }
+    #bottom-row {
+      display:flex;
+      justify-content:center;
+      margin:10px;
+      width: 100vw;
+    }
+    #tableau {
+      display: flex;
+      justify-content: center;
+      width: 100vw;
+      gap: 8px;
+    }
     .pile {
       width:80px; height:120px;
       border:1px dashed rgba(255,255,255,0.4);
       border-radius:8px; margin:5px; position:relative;
+      background:rgba(255,255,255,0.01);
+      transition: border-color 0.18s;
+    }
+    .pile.hint {
+      border-color: #ffd700 !important;
+      box-shadow: 0 0 10px 2px #ffd70055;
+      animation: shake 0.18s 2;
+    }
+    @keyframes shake {
+      0% { transform: translateX(0);}
+      25% { transform: translateX(-6px);}
+      50% { transform: translateX(6px);}
+      75% { transform: translateX(-3px);}
+      100% { transform: translateX(0);}
     }
     .card {
       width:80px; height:120px; border-radius:8px;
       position:absolute; cursor:grab;
+      box-shadow: 0 2px 6px #0005;
+      user-select: none;
+      border:2px solid #0002;
+      transition: box-shadow 0.15s, border-color 0.12s;
+    }
+    .card.hint {
+      box-shadow: 0 0 18px 4px #ffd700aa;
+      border-color: #ffd700;
+      animation: shake 0.18s 2;
     }
   </style>
 </head>
@@ -34,11 +82,11 @@
   </div>
   <div id="game">
     <div id="top-row">
-      <div id="freecells" style="display:flex;"></div>
-      <div id="foundations" style="display:flex; margin-left:50px;"></div>
+      <div id="freecells"></div>
+      <div id="foundations"></div>
     </div>
     <div id="bottom-row">
-      <div id="tableau" style="display:flex;"></div>
+      <div id="tableau"></div>
     </div>
   </div>
 
@@ -91,18 +139,19 @@ function restartGame(){
 function saveState(){ 
   gameState.history.push(JSON.parse(JSON.stringify(gameState))); 
 }
-function undoMove(){ 
-  if (gameState.history.length>0){ 
-    gameState=gameState.history.pop(); 
-    render(); 
-  } 
+function undoMove(){
+  if (gameState.history.length>0){
+    const prev = gameState.history.pop();
+    gameState = JSON.parse(JSON.stringify(prev));
+    render();
+  }
 }
 
 // ====== Rules ======
-function canPlaceOn(card,target){
+function canPlaceOn(card, target) {
   if (!target) return true;
-  const ri=ranks.indexOf(card.rank), rt=ranks.indexOf(target.rank);
-  return (ri===rt-1 && cardColor(card.suit)!==cardColor(target.suit));
+  const ri = ranks.indexOf(card.rank), rt = ranks.indexOf(target.rank);
+  return (ri === rt + 1 && cardColor(card.suit) !== cardColor(target.suit));
 }
 function canPlaceOnFoundation(card,pile){
   if (pile.length===0) return card.rank==="A";
@@ -113,7 +162,7 @@ function canPlaceOnFoundation(card,pile){
 
 function validSequence(cards){
   for (let i=0;i<cards.length-1;i++){
-    if (!canPlaceOn(cards[i],cards[i+1])) return false;
+    if (!canPlaceOn(cards[i+1], cards[i])) return false;
   }
   return true;
 }
@@ -154,7 +203,9 @@ function dropOnTableau(i){
     if (sourceType==="tableau"){ gameState.tableau[sourceIdx].splice(-draggedCards.length); }
     else if (sourceType==="freecell"){ gameState.freecells[sourceIdx]=null; }
     gameState.tableau[i]=gameState.tableau[i].concat(draggedCards);
-    draggedCards=[]; render();
+    draggedCards=[]; 
+    render();
+    checkWin();
   }
 }
 
@@ -165,7 +216,9 @@ function dropOnFreecell(i){
     if (sourceType==="tableau"){ gameState.tableau[sourceIdx].pop(); }
     else if (sourceType==="freecell") return;
     gameState.freecells[i]=draggedCards[0];
-    draggedCards=[]; render();
+    draggedCards=[]; 
+    render();
+    checkWin();
   }
 }
 
@@ -177,29 +230,100 @@ function dropOnFoundation(i){
     if (sourceType==="tableau"){ gameState.tableau[sourceIdx].pop(); }
     else if (sourceType==="freecell"){ gameState.freecells[sourceIdx]=null; }
     gameState.foundations[i].push(draggedCards[0]);
-    draggedCards=[]; render();
+    draggedCards=[]; 
+    render();
+    checkWin();
   }
 }
 
 // ====== Hint ======
+let lastHint = null;
 function showHint(){
+  clearHints();
+  // أولاً: جرب نقل من tableau إلى foundation
   for (let i=0;i<8;i++){
     const pile=gameState.tableau[i];
     if (pile.length>0){
       const c=pile[pile.length-1];
       for (let j=0;j<4;j++){
         if (canPlaceOnFoundation(c,gameState.foundations[j])){
-          alert(`يمكن نقل ${cardId(c)} إلى الأساس ${j+1}`);
+          highlightCard(c);
+          highlightPile('foundations',j);
+          lastHint = {type: "foundation", from: i, to: j, card: c};
           return;
         }
       }
     }
   }
-  alert("لا توجد تلميحات متاحة");
+  // ثانياً: جرب نقل من tableau إلى tableau أخرى
+  for (let i=0;i<8;i++){
+    const pile=gameState.tableau[i];
+    if (pile.length>0){
+      for (let j=0;j<8;j++){
+        if (i===j) continue;
+        const c = pile[pile.length-1];
+        const target = gameState.tableau[j][gameState.tableau[j].length-1];
+        if ((gameState.tableau[j].length===0 && validSequence([c])) ||
+            (gameState.tableau[j].length>0 && canPlaceOn(c,target) && validSequence([c]))) {
+          highlightCard(c);
+          highlightPile('tableau',j);
+          lastHint = {type: "tableau", from: i, to: j, card: c};
+          return;
+        }
+      }
+    }
+  }
+  // ثالثاً: جرب نقل من tableau إلى freecell
+  for (let i=0;i<8;i++){
+    const pile=gameState.tableau[i];
+    if (pile.length>0){
+      for (let j=0;j<4;j++){
+        if (!gameState.freecells[j]){
+          highlightCard(pile[pile.length-1]);
+          highlightPile('freecells',j);
+          lastHint = {type: "freecell", from: i, to: j, card: pile[pile.length-1]};
+          return;
+        }
+      }
+    }
+  }
+  // رابعاً: لا توجد تلميحات
+  lastHint = null;
+}
+
+function clearHints() {
+  document.querySelectorAll('.card.hint').forEach(card => card.classList.remove('hint'));
+  document.querySelectorAll('.pile.hint').forEach(pile => pile.classList.remove('hint'));
+}
+function highlightCard(card){
+  setTimeout(() => {
+    document.querySelectorAll('.card').forEach(img=>{
+      if(img.dataset.id===cardId(card)) img.classList.add('hint');
+    });
+  },5);
+}
+function highlightPile(type,idx){
+  setTimeout(() => {
+    let sel = '';
+    if(type==="freecells") sel = "#freecells>.pile";
+    else if(type==="foundations") sel = "#foundations>.pile";
+    else sel = "#tableau>.pile";
+    document.querySelectorAll(sel)[idx].classList.add('hint');
+  },5);
+}
+
+// ====== Check Win ======
+function checkWin(){
+  let total = 0;
+  for(let i=0;i<4;i++) total += gameState.foundations[i].length;
+  if(total === 52){
+    setTimeout(()=>{ alert("مبروك! لقد فزت باللعبة 🎉"); }, 100);
+  }
 }
 
 // ====== Render ======
 function render(){
+  clearHints();
   const freeDiv=document.getElementById('freecells');
   const foundDiv=document.getElementById('foundations');
   const tabDiv=document.getElementById('tableau');
