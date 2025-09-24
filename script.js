@@ -41,6 +41,10 @@ function render() {
     col.forEach((card, i) => {
       const img = document.createElement("img");
       img.src = `Cards/${card.value}${card.suit}.jpg`;
+
+      // 🕵️ طباعة المسار للتأكد
+      console.log("Loading:", img.src);
+
       img.className = "card";
       img.dataset.col = ci;
       img.dataset.index = i;
@@ -60,7 +64,6 @@ function onDragStart(e) {
   const index = parseInt(e.target.dataset.index);
   const stack = columns[col].slice(index);
 
-  // السماح بسحب الاستاك كامل (من غير معادلة معقدة الأول)
   dragging = {stack, fromCol: col, index};
 }
 
@@ -80,6 +83,25 @@ function restartGame() {
   shuffle(deck);
   deal();
   render();
+  checkAllImages();
+}
+
+// ✅ كود يتأكد من وجود كل الصور
+function checkAllImages() {
+  let missing = [];
+  for (let s of suits) {
+    for (let v of values) {
+      let img = new Image();
+      img.src = `Cards/${v}${s}.jpg`;
+      img.onerror = () => {
+        missing.push(`${v}${s}.jpg`);
+        console.error("Missing:", `${v}${s}.jpg`);
+      };
+    }
+  }
+  if (missing.length === 0) {
+    console.log("✅ كل الصور موجودة صح");
+  }
 }
 
 restartGame();
