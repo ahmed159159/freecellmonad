@@ -1,0 +1,49 @@
+body {
+  font-family: sans-serif;
+  background: #0b3d0b;
+  color: white;
+  text-align: center;
+}
+
+#game {
+  width: 95%;
+  margin: auto;
+}
+
+.zone {
+  display: flex;
+  justify-content: space-around;
+  margin: 20px 0;
+}
+
+.column {
+  width: 80px;
+  min-height: 400px;
+  background: rgba(255,255,255,0.1);
+  border: 2px dashed rgba(255,255,255,0.4);
+  border-radius: 8px;
+  padding: 5px;
+}
+
+.card {
+  width: 70px;
+  height: 100px;
+  background: white;
+  color: black;
+  border-radius: 5px;
+  margin-top: -80px;
+  position: relative;
+  z-index: 1;
+  cursor: grab;
+  text-align: center;
+  line-height: 100px;
+  font-weight: bold;
+}
+
+.card.red {
+  color: red;
+}
+
+.column .card:first-child {
+  margin-top: 0;
+}
