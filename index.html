@@ -2,245 +2,140 @@
 <html lang="ar">
 <head>
   <meta charset="utf-8" />
-  <title>FreeCell - Fast</title>
+  <title>FreeCell</title>
   <style>
-    :root{--card-w:80px;--card-h:120px;--gap:8px;}
-    body {
-      margin:0;
-      font-family:Arial,Helvetica,sans-serif;
-      background: url("background.jpg") no-repeat center center fixed;
+    body { 
+      margin:0; 
+      font-family:Arial; 
+      background: url('background.jpg') no-repeat center center fixed;
       background-size: cover;
-      color:#fff;
+      overflow-x:hidden;
     }
-    .ui {
-      display:flex;justify-content:center;gap:20px;padding:12px;
-      background:rgba(0,0,0,0.35);
-      align-items:center;
-    }
-    button, select{ padding:8px 12px;border-radius:6px;border:none;background:#1b4332;color:#fff;cursor:pointer}
-    #board { padding:14px; display:flex;flex-direction:column; align-items:center; gap:12px; }
-    #top-row { width: 920px; display:flex; justify-content:space-between; gap:12px; }
+    h1 { text-align:center; margin:10px; color:white; }
+    #controls { text-align:center; margin:10px; }
+    button { margin:5px; padding:8px 15px; border:none; border-radius:5px; background:#1b4332; color:white; cursor:pointer; }
+    #game { display:flex; flex-direction:column; align-items:center; }
+    #top-row { display:flex; justify-content:space-between; width:900px; margin:10px; }
     #freecells, #foundations { display:flex; gap:8px; }
-    .slot { width:var(--card-w); height:var(--card-h); border-radius:8px; border:1px dashed rgba(255,255,255,0.2); background:rgba(0,0,0,0.25); position:relative; }
-    #tableau { width: 100%; display:flex; justify-content:center; gap:12px; padding:6px 0; }
-    .column { width:var(--card-w); min-height:180px; position:relative; }
-    /* card element */
-    .card {
-      width:var(--card-w);
-      height:var(--card-h);
-      position:absolute;
-      left:0;
-      border-radius:6px;
-      cursor:grab;
-      transition: top 160ms linear, transform 120ms;
-      box-shadow: 0 6px 14px rgba(0,0,0,0.45);
-      user-select:none;
-      background:#fff;
-      overflow:hidden;
+    #tableau { display:flex; gap:8px; width:100vw; justify-content:center; }
+    .pile { 
+      width:80px; 
+      min-height:120px; 
+      border:1px dashed rgba(255,255,255,0.4); 
+      border-radius:8px; 
+      margin:5px; 
+      position:relative; 
+      background:rgba(0,0,0,0.1);
     }
-    .card img{ width:100%; height:100%; display:block; pointer-events:none; }
-    /* small overlay for notifications */
-    #note { position:fixed; right:12px; bottom:12px; background:rgba(0,0,0,0.6); padding:8px 12px; border-radius:8px; font-size:13px; display:none; }
+    .card { 
+      width:80px; 
+      height:120px; 
+      border-radius:8px; 
+      position:absolute; 
+      cursor:grab; 
+      user-select:none; 
+    }
+    .card img { 
+      width:100%; 
+      height:100%; 
+      display:block; 
+      border-radius:6px; 
+      pointer-events:none;
+    }
   </style>
 </head>
 <body>
-  <div class="ui">
+  <h1>FreeCell</h1>
+  <div id="controls">
     <button onclick="restartGame()">إعادة تشغيل</button>
     <button onclick="undoMove()">تراجع</button>
-    <select id="levelSelect" onchange="setLevel(this.value)">
-      <option value="easy">Easy</option>
-      <option value="medium" selected>Medium</option>
-      <option value="hard">Hard</option>
-    </select>
-    <span id="info">سحب متعدد حسب FreeCell rules — تحقق من Console للـ logs</span>
   </div>
 
-  <div id="board">
+  <div id="game">
     <div id="top-row">
-      <div id="freecells" aria-label="Free Cells"></div>
-      <div id="foundations" aria-label="Foundations"></div>
+      <div id="freecells"></div>
+      <div id="foundations"></div>
     </div>
     <div id="tableau"></div>
   </div>
 
-  <div id="note"></div>
-
 <script>
-/* ====== Data & State ====== */
 const ranks = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
-const suits = ["S","H","D","C"]; // Spades Hearts Diamonds Clubs
-let level = "medium";
+const suits = ["S","H","D","C"]; 
 
 let gameState = {
   tableau:[[],[],[],[],[],[],[],[]],
   freecells:[null,null,null,null],
-  foundations:[[],[],[],[]]
+  foundations:[[],[],[],[]],
+  history:[]
 };
 
-// map id -> DOM element (created once per card per deal)
-let cardEls = new Map();
-// history stack of lightweight moves
-let history = [];
-
-/* ===== utilities ===== */
 function cardId(c){ return c.rank + c.suit; }
 function cardColor(s){ return (s==="H"||s==="D") ? "red" : "black"; }
 
-/* ===== preload images ===== */
-function preloadAllImages(cb){
-  const paths = [];
-  suits.forEach(s => ranks.forEach(r => paths.push(`Cards/${r}${s}.jpg`)));
-  let loaded=0, fail=0;
-  for (let p of paths){
-    const img = new Image();
-    img.onload = ()=>{ loaded++; if (loaded+fail===paths.length) cb(loaded,fail); };
-    img.onerror = ()=>{ fail++; console.error("Missing:", p); if (loaded+fail===paths.length) cb(loaded,fail); };
-    img.src = p;
-  }
-}
+function createCardImg(card, idx=0){
+  const imgWrap = document.createElement('div');
+  imgWrap.className = 'card';
+  imgWrap.dataset.id = cardId(card);
+  imgWrap.style.top = (idx * 25) + "px";
+  imgWrap.draggable = true;
 
-/* ===== create deck and deal depending on level (easy/medium/hard) ===== */
-function initDeck(){
-  let deck = [];
-  for (let r of ranks) for (let s of suits) deck.push({rank:r, suit:s});
-  // shuffle
-  for (let i=deck.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [deck[i], deck[j]] = [deck[j], deck[i]];
-  }
-  // level adjustments
-  if (level === "easy"){
-    // push small ranks slightly forward (so they're more likely near top)
-    deck.sort((a,b)=> (ranks.indexOf(a.rank)-ranks.indexOf(b.rank)) + (Math.random()-0.5)*1 );
-  } else if (level === "medium"){
-    deck.sort((a,b)=> (Math.random()-0.5) + (ranks.indexOf(a.rank)-ranks.indexOf(b.rank) < 2 ? -0.2 : 0) );
-  }
-  return deck;
-}
-
-/* ===== rendering once: create containers and initial card elements ===== */
-const tableauDiv = document.getElementById('tableau');
-const freeDiv = document.getElementById('freecells');
-const foundDiv = document.getElementById('foundations');
-
-function buildContainers(){
-  // freecells
-  freeDiv.innerHTML = "";
-  for (let i=0;i<4;i++){
-    const slot = document.createElement('div');
-    slot.className = 'slot';
-    slot.dataset.free = i;
-    slot.addEventListener('dragover', e=>e.preventDefault());
-    slot.addEventListener('drop', ()=> dropOnFreecell(i));
-    freeDiv.appendChild(slot);
-  }
-  // foundations
-  foundDiv.innerHTML = "";
-  for (let i=0;i<4;i++){
-    const slot = document.createElement('div');
-    slot.className = 'slot';
-    slot.dataset.found = i;
-    slot.addEventListener('dragover', e=>e.preventDefault());
-    slot.addEventListener('drop', ()=> dropOnFoundation(i));
-    foundDiv.appendChild(slot);
-  }
-  // tableau columns
-  tableauDiv.innerHTML = "";
-  for (let i=0;i<8;i++){
-    const col = document.createElement('div');
-    col.className = 'column';
-    col.dataset.col = i;
-    col.addEventListener('dragover', e=>e.preventDefault());
-    col.addEventListener('drop', ()=> dropOnTableau(i));
-    tableauDiv.appendChild(col);
-  }
-}
-
-/* create DOM element for a card (once per card when dealing) */
-function createCardElement(card){
-  const id = cardId(card);
-  const wrap = document.createElement('div');
-  wrap.className = 'card';
-  wrap.dataset.id = id;
-  // top will be set when positioning
   const img = document.createElement('img');
   img.src = `Cards/${card.rank}${card.suit}.jpg`;
-  img.alt = id;
-  wrap.appendChild(img);
+  img.alt = card.rank + card.suit;
+  imgWrap.appendChild(img);
 
-  // drag handlers
-  wrap.addEventListener('dragstart', onCardDragStart);
-  wrap.addEventListener('dragend', onCardDragEnd);
-  // pointer cursor feedback
-  wrap.addEventListener('mousedown', ()=> wrap.style.cursor='grabbing');
-  wrap.addEventListener('mouseup', ()=> wrap.style.cursor='grab');
+  imgWrap.addEventListener('dragstart', dragStart);
+  imgWrap.addEventListener('dragend', dragEnd);
 
-  cardEls.set(id, wrap);
-  return wrap;
+  return imgWrap;
 }
 
-/* ===== position updates: move elements into column containers and set top index ===== */
-function placeCardInColumn(id, colIndex, idxInCol){
-  const el = cardEls.get(id);
-  const colDiv = tableauDiv.querySelector(`.column[data-col="${colIndex}"]`);
-  if (!el || !colDiv) return;
-  colDiv.appendChild(el);
-  // set top
-  el.style.top = (idxInCol * 26) + 'px';
+function maxMovableCards(targetCol = -1){
+  const freeCount = gameState.freecells.filter(x => x === null).length;
+  const emptyCols = gameState.tableau.filter((p, idx) => p.length === 0 && idx !== targetCol).length;
+  return (freeCount + 1) * Math.pow(2, emptyCols);
 }
 
-/* place single card into freecell */
-function placeCardInFreecell(id, freeIndex){
-  const el = cardEls.get(id);
-  const slot = freeDiv.children[freeIndex];
-  if (!el || !slot) return;
-  slot.appendChild(el);
-  el.style.top = '0px';
-}
-
-/* place single card into foundation */
-function placeCardInFoundation(id, fIndex){
-  const el = cardEls.get(id);
-  const slot = foundDiv.children[fIndex];
-  if (!el || !slot) return;
-  slot.appendChild(el);
-  el.style.top = '0px';
-}
-
-/* full reflow for a specific column/free/foundation after state change */
-function reflowColumn(colIndex){
-  const pile = gameState.tableau[colIndex];
-  for (let i=0;i<pile.length;i++){
-    placeCardInColumn(cardId(pile[i]), colIndex, i);
+function initDeck(){
+  let d = [];
+  for (let r of ranks) for (let s of suits) d.push({rank:r, suit:s});
+  for (let i=d.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [d[i], d[j]] = [d[j], d[i]];
   }
+  return d;
 }
-function reflowFreecell(i){
-  const c = gameState.freecells[i];
-  if (c) placeCardInFreecell(cardId(c), i);
-  else {
-    // clear slot content (remove any lingering card elements)
-    const slot = freeDiv.children[i];
-    if (slot.firstChild) slot.removeChild(slot.firstChild);
-  }
+
+function restartGame(){
+  const deck = initDeck();
+  gameState.tableau = [[],[],[],[],[],[],[],[]];
+  for (let i=0;i<deck.length;i++) gameState.tableau[i % 8].push(deck[i]);
+  gameState.freecells = [null,null,null,null];
+  gameState.foundations = [[],[],[],[]];
+  gameState.history = [];
+  render();
 }
-function reflowFoundation(i){
-  const pile = gameState.foundations[i];
-  if (pile.length>0) placeCardInFoundation(cardId(pile[pile.length-1]), i);
-  else {
-    const slot = foundDiv.children[i];
-    if (slot.firstChild) slot.removeChild(slot.firstChild);
+
+function saveState(){
+  gameState.history.push(JSON.parse(JSON.stringify(gameState)));
+}
+function undoMove(){
+  if (gameState.history.length>0){
+    gameState = JSON.parse(JSON.stringify(gameState.history.pop()));
+    render();
   }
 }
 
-/* ===== rules & helpers ===== */
 function canPlaceOn(card, target){
   if (!target) return true;
-  const ri = ranks.indexOf(card.rank), rt = ranks.indexOf(target.rank);
+  const ri = ranks.indexOf(card.rank);
+  const rt = ranks.indexOf(target.rank);
   return (ri + 1 === rt) && (cardColor(card.suit) !== cardColor(target.suit));
 }
 function canPlaceOnFoundation(card, pile){
   if (pile.length === 0) return card.rank === "A";
-  const top = pile[pile.length -1];
+  const top = pile[pile.length-1];
   const ri = ranks.indexOf(card.rank), rt = ranks.indexOf(top.rank);
   return (ri === rt + 1) && (card.suit === top.suit);
 }
@@ -250,224 +145,135 @@ function validSequence(cards){
   }
   return true;
 }
-function maxMovableCards(targetCol=-1){
-  const freeCount = gameState.freecells.filter(x=>x===null).length;
-  const emptyCols = gameState.tableau.filter((p,idx)=>p.length===0 && idx!==targetCol).length;
-  return (freeCount + 1) * Math.pow(2, emptyCols);
-}
 
-/* ===== drag state ===== */
-let draggedStack = []; // array of card objects being dragged
-let dragSource = null; // {type:'tableau'|'freecell', index: n, startIdx: indexInPile}
+let draggedCards = [];
+let sourceIdx = null;
+let sourceType = null;
 
-/* dragstart handler on card elements */
-function onCardDragStart(e){
+function dragStart(e){
   const id = e.currentTarget.dataset.id;
-  // find in tableau
-  for (let ci=0; ci<8; ci++){
-    const pile = gameState.tableau[ci];
-    const idx = pile.findIndex(c => cardId(c)===id);
+  for (let i=0;i<8;i++){
+    const pile = gameState.tableau[i];
+    const idx = pile.findIndex(c => cardId(c) === id);
     if (idx !== -1){
       const moving = pile.slice(idx);
-      const allowed = maxMovableCards();
-      console.log("drag start - stack:", moving.map(c=>cardId(c)), "allowed:", allowed);
-      if (!validSequence(moving) || moving.length > allowed){
+      const maxAllowed = maxMovableCards();
+      if (validSequence(moving) && moving.length <= maxAllowed){
+        draggedCards = moving;
+        sourceIdx = i;
+        sourceType = "tableau";
+        e.dataTransfer.setData('text/plain', id);
+        e.dataTransfer.effectAllowed = 'move';
+        return;
+      } else {
         e.preventDefault();
-        showNote("لا يمكنك سحب هذه السلسلة (غير صحيحة أو تتجاوز الحد المسموح).", 1500);
         return;
       }
-      draggedStack = moving.slice();
-      dragSource = {type:'tableau', index:ci, startIdx: idx};
-      try { e.dataTransfer.setData('text/plain', cardId(moving[0])); e.dataTransfer.effectAllowed='move'; } catch(err){}
-      return;
     }
   }
-  // check freecells
   for (let i=0;i<4;i++){
     const c = gameState.freecells[i];
     if (c && cardId(c) === id){
-      draggedStack = [c];
-      dragSource = {type:'freecell', index:i};
-      try { e.dataTransfer.setData('text/plain', cardId(c)); e.dataTransfer.effectAllowed='move'; } catch(err){}
+      draggedCards = [c];
+      sourceIdx = i;
+      sourceType = "freecell";
+      e.dataTransfer.setData('text/plain', id);
+      e.dataTransfer.effectAllowed = 'move';
       return;
     }
   }
 }
-/* dragend cleanup */
-function onCardDragEnd(e){
-  setTimeout(()=>{ draggedStack=[]; dragSource=null; }, 0);
+function dragEnd(e){
+  draggedCards = [];
+  sourceIdx = null;
+  sourceType = null;
 }
 
-/* ===== drop handlers that operate on state and move DOM elements efficiently ===== */
-function dropOnTableau(destIndex){
-  if (!draggedStack || draggedStack.length===0) return;
-  const destPile = gameState.tableau[destIndex];
-  const targetTop = destPile[destPile.length-1];
-  // check allowed count for this destination
-  const allowed = maxMovableCards(destIndex);
-  if (draggedStack.length > allowed){
-    showNote("الحركة أكبر من الحد المسموح إلى هذا العمود.",1200);
-    return;
-  }
-  if ((destPile.length===0 && validSequence(draggedStack)) ||
-      (destPile.length>0 && canPlaceOn(draggedStack[0], targetTop) && validSequence(draggedStack))){
-    // perform move on state
-    saveHistoryMove(dragSource, {type:'tableau', index:destIndex}, draggedStack.map(c=>cardId(c)));
-    if (dragSource.type === 'tableau'){
-      gameState.tableau[dragSource.index].splice(-draggedStack.length);
-      // append to dest
-      gameState.tableau[destIndex] = gameState.tableau[destIndex].concat(draggedStack);
-      // reflow both columns
-      reflowColumn(dragSource.index);
-      reflowColumn(destIndex);
-    } else if (dragSource.type === 'freecell'){
-      // remove from freecell
-      gameState.freecells[dragSource.index] = null;
-      gameState.tableau[destIndex] = gameState.tableau[destIndex].concat(draggedStack);
-      reflowFreecell(dragSource.index);
-      reflowColumn(destIndex);
+function dropOnTableau(i){
+  if (draggedCards.length === 0) return;
+  const pile = gameState.tableau[i];
+  const target = pile[pile.length - 1];
+  const allowed = maxMovableCards(i);
+  if (draggedCards.length > allowed) return;
+
+  if ((pile.length === 0 && validSequence(draggedCards)) ||
+      (pile.length > 0 && canPlaceOn(draggedCards[0], target) && validSequence(draggedCards))){
+    saveState();
+    if (sourceType === "tableau"){
+      gameState.tableau[sourceIdx].splice(-draggedCards.length);
+    } else if (sourceType === "freecell"){
+      gameState.freecells[sourceIdx] = null;
     }
-    draggedStack = []; dragSource = null;
-  } else {
-    showNote("المكان غير صالح لوضع هذه السلسلة.", 1000);
+    gameState.tableau[i] = gameState.tableau[i].concat(draggedCards);
+    draggedCards = [];
+    render();
+  }
+}
+function dropOnFreecell(i){
+  if (draggedCards.length !== 1) return;
+  if (!gameState.freecells[i]){
+    saveState();
+    if (sourceType === "tableau") gameState.tableau[sourceIdx].pop();
+    else if (sourceType === "freecell") return;
+    gameState.freecells[i] = draggedCards[0];
+    draggedCards = [];
+    render();
+  }
+}
+function dropOnFoundation(i){
+  if (draggedCards.length !== 1) return;
+  const pile = gameState.foundations[i];
+  if (canPlaceOnFoundation(draggedCards[0], pile)){
+    saveState();
+    if (sourceType === "tableau") gameState.tableau[sourceIdx].pop();
+    else if (sourceType === "freecell") gameState.freecells[sourceIdx] = null;
+    gameState.foundations[i].push(draggedCards[0]);
+    draggedCards = [];
+    render();
   }
 }
 
-function dropOnFreecell(dest){
-  if (!draggedStack || draggedStack.length===0) return;
-  if (draggedStack.length !== 1){
-    showNote("يمكن إيداع بطاقة واحدة فقط في FreeCell.", 900);
-    return;
-  }
-  if (gameState.freecells[dest]) { showNote("المربع مش فاضي.",900); return; }
-  // move
-  saveHistoryMove(dragSource, {type:'freecell', index:dest}, [cardId(draggedStack[0])]);
-  if (dragSource.type === 'tableau'){
-    gameState.tableau[dragSource.index].pop();
-    reflowColumn(dragSource.index);
-  } else if (dragSource.type === 'freecell'){
-    // shouldn't happen
-    return;
-  }
-  gameState.freecells[dest] = draggedStack[0];
-  reflowFreecell(dest);
-  draggedStack=[]; dragSource=null;
-}
+function render(){
+  const freeDiv = document.getElementById('freecells');
+  const foundDiv = document.getElementById('foundations');
+  const tabDiv = document.getElementById('tableau');
+  freeDiv.innerHTML = ""; foundDiv.innerHTML = ""; tabDiv.innerHTML = "";
 
-function dropOnFoundation(dest){
-  if (!draggedStack || draggedStack.length===0) return;
-  if (draggedStack.length !== 1){ showNote("يمكن نقل بطاقة واحدة فقط للأساسات.",900); return; }
-  const card = draggedStack[0];
-  if (canPlaceOnFoundation(card, gameState.foundations[dest])){
-    saveHistoryMove(dragSource, {type:'foundation', index:dest}, [cardId(card)]);
-    if (dragSource.type==='tableau'){ gameState.tableau[dragSource.index].pop(); reflowColumn(dragSource.index); }
-    else if (dragSource.type==='freecell'){ gameState.freecells[dragSource.index] = null; reflowFreecell(dragSource.index); }
-    gameState.foundations[dest].push(card);
-    reflowFoundation(dest);
-    draggedStack=[]; dragSource=null;
-  } else showNote("لا يمكن وضع هذه البطاقة في الأساسات.",1000);
-}
-
-/* ===== lightweight history for undo =====
-   store: {from:{type,index,startIdx?}, to:{type,index}, cards:[id,...]}
-*/
-function saveHistoryMove(from, to, cardIds){
-  history.push({from, to, cards: cardIds});
-  // limit history length
-  if (history.length > 200) history.shift();
-}
-function undoMove(){
-  if (history.length===0){ showNote("لا توجد حركة للتراجع.",900); return; }
-  const rec = history.pop();
-  // rec.cards are ids in order as moved (top->...)
-  const cards = rec.cards.map(id=> findCardObjectById(id) );
-  // revert: move from 'to' back to 'from'
-  // remove from destination
-  if (rec.to.type === 'tableau'){
-    // pop as many cards as moved
-    gameState.tableau[rec.to.index].splice(-cards.length);
-    reflowColumn(rec.to.index);
-  } else if (rec.to.type === 'freecell'){
-    gameState.freecells[rec.to.index] = null; reflowFreecell(rec.to.index);
-  } else if (rec.to.type === 'foundation'){
-    gameState.foundations[rec.to.index].pop(); reflowFoundation(rec.to.index);
-  }
-  // put back to source
-  if (rec.from.type === 'tableau'){
-    gameState.tableau[rec.from.index] = gameState.tableau[rec.from.index].concat(cards);
-    reflowColumn(rec.from.index);
-  } else if (rec.from.type === 'freecell'){
-    gameState.freecells[rec.from.index] = cards[0]; reflowFreecell(rec.from.index);
-  }
-  showNote("تم التراجع.",900);
-}
-
-/* helper to find card object in gameState by id */
-function findCardObjectById(id){
-  // search tableau
-  for (let c of gameState.tableau.flat()) if (cardId(c)===id) return c;
-  for (let c of gameState.freecells) if (c && cardId(c)===id) return c;
-  for (let pile of gameState.foundations) for (let c of pile) if (cardId(c)===id) return c;
-  // if not found (e.g., moved and removed) recreate from id string:
-  const r = id.slice(0, id.length-1);
-  const s = id.slice(-1);
-  return {rank:r, suit:s};
-}
-
-/* ===== show small note ===== */
-let noteTimer = null;
-function showNote(txt, ms=1000){
-  const n = document.getElementById('note');
-  n.textContent = txt;
-  n.style.display = 'block';
-  clearTimeout(noteTimer);
-  noteTimer = setTimeout(()=> n.style.display='none', ms);
-}
-
-/* ===== (re)deal and setup ===== */
-function restartGame(){
-  history = [];
-  // remove old card Els from DOM & map
-  cardEls.forEach(el=>{ if (el.parentNode) el.parentNode.removeChild(el); });
-  cardEls.clear();
-
-  buildContainers();
-  const deck = initDeck();
-  // fill state
-  gameState.tableau = [[],[],[],[],[],[],[],[]];
-  for (let i=0;i<deck.length;i++) gameState.tableau[i % 8].push(deck[i]);
-  gameState.freecells = [null,null,null,null];
-  gameState.foundations = [[],[],[],[]];
-
-  // create card elements once and place
-  for (let ci=0; ci<8; ci++){
-    const pile = gameState.tableau[ci];
-    for (let idx=0; idx<pile.length; idx++){
-      const c = pile[idx];
-      const el = createCardElement(c);
-      // append to column and position
-      const colDiv = tableauDiv.querySelector(`.column[data-col="${ci}"]`);
-      colDiv.appendChild(el);
-      el.style.top = (idx * 26) + 'px';
+  for (let i=0;i<4;i++){
+    const slot = document.createElement('div');
+    slot.className = 'pile';
+    slot.ondragover = e => e.preventDefault();
+    slot.ondrop = () => dropOnFreecell(i);
+    if (gameState.freecells[i]){
+      slot.appendChild(createCardImg(gameState.freecells[i],0));
     }
+    freeDiv.appendChild(slot);
   }
-  // freecells & foundations empty (nothing to place)
+
+  for (let i=0;i<4;i++){
+    const slot = document.createElement('div');
+    slot.className = 'pile';
+    slot.ondragover = e => e.preventDefault();
+    slot.ondrop = () => dropOnFoundation(i);
+    if (gameState.foundations[i].length > 0){
+      slot.appendChild(createCardImg(gameState.foundations[i].slice(-1)[0],0));
+    }
+    foundDiv.appendChild(slot);
+  }
+
+  for (let i=0;i<8;i++){
+    const slot = document.createElement('div');
+    slot.className = 'pile';
+    slot.ondragover = e => e.preventDefault();
+    slot.ondrop = () => dropOnTableau(i);
+    gameState.tableau[i].forEach((card, idx) => {
+      slot.appendChild(createCardImg(card, idx));
+    });
+    tabDiv.appendChild(slot);
+  }
 }
 
-/* ===== level setting ===== */
-function setLevel(v){ level = v; restartGame(); }
-
-/* ===== initial preload then start ===== */
-preloadAllImages((loaded,fail)=>{
-  console.log("Images loaded:", loaded, "failed:", fail);
-  restartGame();
-  if (fail>0) showNote("بعض صور البطاقات مفقودة. تحقق من مسار Cards/ وأسماء الملفات.",3500);
-});
-
-/* ===== expose small helpers to global for buttons ===== */
-window.restartGame = restartGame;
-window.undoMove = undoMove;
-window.setLevel = setLevel;
+restartGame();
 </script>
 </body>
 </html>
