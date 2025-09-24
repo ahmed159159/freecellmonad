@@ -1,20 +1,256 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FreeCell Game</title>
-  <link rel="stylesheet" href="style.css">
+  <title>FreeCell</title>
+  <style>
+    body { background:#064420; color:white; font-family:Arial; margin:0; }
+    h1 { text-align:center; margin:10px; }
+    #controls { text-align:center; margin:10px; }
+    button {
+      margin:5px; padding:8px 15px; border:none; border-radius:5px;
+      background:#1b4332; color:white; cursor:pointer;
+    }
+    button:hover{ background:#2d6a4f; }
+    #game { display:flex; flex-direction:column; align-items:center; }
+    #top-row {
+      display: flex;
+      justify-content: space-between;
+      width: 800px;
+      margin: 10px;
+    }
+    #freecells, #foundations { display: flex; gap: 8px; }
+    #bottom-row { display:flex; justify-content:center; margin:10px; width: 100vw; }
+    #tableau { display: flex; justify-content: center; width: 100vw; gap: 8px; }
+    .pile {
+      width:80px; height:120px;
+      border:1px dashed rgba(255,255,255,0.4);
+      border-radius:8px; margin:5px; position:relative;
+      background:rgba(255,255,255,0.01);
+    }
+    .card {
+      width:80px; height:120px; border-radius:8px;
+      position:absolute; cursor:grab;
+      box-shadow: 0 2px 6px #0005;
+      user-select: none;
+      border:2px solid #0002;
+    }
+  </style>
 </head>
 <body>
   <h1>FreeCell</h1>
-  <div id="game">
-    <div id="freecells"></div>
-    <div id="foundations"></div>
-    <div id="columns"></div>
+  <div id="controls">
+    <button onclick="restartGame()">إعادة تشغيل</button>
+    <button onclick="undoMove()">تراجع</button>
   </div>
-  <button onclick="restartGame()">إعادة تشغيل</button>
+  <div id="game">
+    <div id="top-row">
+      <div id="freecells"></div>
+      <div id="foundations"></div>
+    </div>
+    <div id="bottom-row">
+      <div id="tableau"></div>
+    </div>
+  </div>
 
-  <script src="script.js"></script>
+<script>
+const ranks = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const suits = ["S","H","D","C"];
+
+let gameState = {
+  tableau:[[],[],[],[],[],[],[],[]],
+  freecells:[null,null,null,null],
+  foundations:[[],[],[],[]],
+  history:[]
+};
+
+function cardId(c){ return c.rank+c.suit; }
+function cardColor(s){ return (s==="H"||s==="D")?"red":"black"; }
+
+function createCardImg(card,idx=0){
+  const img=document.createElement('img');
+  img.className='card';
+  img.src=`Cards/${card.rank}${card.suit}.jpg`;
+  img.onerror=()=>console.error("Missing:", img.src);
+  img.dataset.id=cardId(card);
+  img.style.top=(idx*25)+"px";
+  img.draggable=true;
+  img.ondragstart=dragStart;
+  return img;
+}
+
+// ====== حساب الحد الأقصى للبطاقات الممكن تحريكها ======
+function maxMovableCards(targetCol=-1){
+  let freeCells = gameState.freecells.filter(x => x === null).length;
+  let emptyCols = gameState.tableau.filter((pile,idx) => pile.length === 0 && idx !== targetCol).length;
+  return (freeCells + 1) * Math.pow(2, emptyCols);
+}
+
+// ====== Game Init ======
+function initDeck(){
+  let d=[]; 
+  for (let r of ranks){ for (let s of suits){ d.push({rank:r,suit:s}); } }
+  for (let i=d.length-1;i>0;i--){ 
+    const j=Math.floor(Math.random()*(i+1)); 
+    [d[i],d[j]]=[d[j],d[i]]; 
+  }
+  return d;
+}
+
+function restartGame(){
+  const deck=initDeck();
+  gameState.tableau=[[],[],[],[],[],[],[],[]];
+  for (let i=0;i<deck.length;i++){ gameState.tableau[i%8].push(deck[i]); }
+  gameState.freecells=[null,null,null,null];
+  gameState.foundations=[[],[],[],[]];
+  gameState.history=[];
+  render();
+}
+
+function saveState(){ 
+  gameState.history.push(JSON.parse(JSON.stringify(gameState))); 
+}
+function undoMove(){
+  if (gameState.history.length>0){
+    const prev = gameState.history.pop();
+    gameState = JSON.parse(JSON.stringify(prev));
+    render();
+  }
+}
+
+// ====== Rules ======
+function canPlaceOn(card, target) {
+  if (!target) return true;
+  const ri = ranks.indexOf(card.rank), rt = ranks.indexOf(target.rank);
+  return (ri === rt + 1 && cardColor(card.suit) !== cardColor(target.suit));
+}
+function canPlaceOnFoundation(card,pile){
+  if (pile.length===0) return card.rank==="A";
+  const top=pile[pile.length-1];
+  const ri=ranks.indexOf(card.rank), rt=ranks.indexOf(top.rank);
+  return (ri===rt+1 && card.suit===top.suit);
+}
+
+function validSequence(cards){
+  for (let i=0;i<cards.length-1;i++){
+    if (!canPlaceOn(cards[i+1], cards[i])) return false;
+  }
+  return true;
+}
+
+// ====== Drag & Drop ======
+let draggedCards=[],sourceIdx=null,sourceType=null;
+
+function dragStart(e){
+  const id=e.target.dataset.id;
+  // Tableau
+  for (let i=0;i<8;i++){
+    const pile=gameState.tableau[i];
+    const idx=pile.findIndex(c=>cardId(c)===id);
+    if (idx!==-1){
+      const moving=pile.slice(idx);
+      if (validSequence(moving) && moving.length <= maxMovableCards()){
+        draggedCards=moving; 
+        sourceIdx=i; 
+        sourceType="tableau"; 
+        return;
+      } else { draggedCards=[]; return; }
+    }
+  }
+  // Freecell
+  for (let i=0;i<4;i++){
+    const c=gameState.freecells[i];
+    if (c && cardId(c)===id){
+      draggedCards=[c]; 
+      sourceIdx=i; 
+      sourceType="freecell"; 
+      return;
+    }
+  }
+}
+
+function dropOnTableau(i){
+  if (draggedCards.length===0) return;
+  const pile=gameState.tableau[i];
+  const target=pile[pile.length-1];
+  let maxDrop = maxMovableCards(i);
+  if (draggedCards.length > maxDrop) return;
+
+  if ((pile.length===0 && validSequence(draggedCards)) ||
+      (pile.length>0 && canPlaceOn(draggedCards[0],target) && validSequence(draggedCards))) {
+    saveState();
+    if (sourceType==="tableau"){ gameState.tableau[sourceIdx].splice(-draggedCards.length); }
+    else if (sourceType==="freecell"){ gameState.freecells[sourceIdx]=null; }
+    gameState.tableau[i]=gameState.tableau[i].concat(draggedCards);
+    draggedCards=[]; 
+    render();
+  }
+}
+
+function dropOnFreecell(i){
+  if (draggedCards.length!==1) return;
+  if (!gameState.freecells[i]){
+    saveState();
+    if (sourceType==="tableau"){ gameState.tableau[sourceIdx].pop(); }
+    else if (sourceType==="freecell") return;
+    gameState.freecells[i]=draggedCards[0];
+    draggedCards=[]; 
+    render();
+  }
+}
+
+function dropOnFoundation(i){
+  if (draggedCards.length!==1) return;
+  const pile=gameState.foundations[i];
+  if (canPlaceOnFoundation(draggedCards[0],pile)){
+    saveState();
+    if (sourceType==="tableau"){ gameState.tableau[sourceIdx].pop(); }
+    else if (sourceType==="freecell"){ gameState.freecells[sourceIdx]=null; }
+    gameState.foundations[i].push(draggedCards[0]);
+    draggedCards=[]; 
+    render();
+  }
+}
+
+// ====== Render ======
+function render(){
+  const freeDiv=document.getElementById('freecells');
+  const foundDiv=document.getElementById('foundations');
+  const tabDiv=document.getElementById('tableau');
+  freeDiv.innerHTML=""; foundDiv.innerHTML=""; tabDiv.innerHTML="";
+  
+  for (let i=0;i<4;i++){
+    const slot=document.createElement('div');
+    slot.className='pile';
+    slot.ondragover=e=>e.preventDefault();
+    slot.ondrop=()=>dropOnFreecell(i);
+    if (gameState.freecells[i]) slot.appendChild(createCardImg(gameState.freecells[i]));
+    freeDiv.appendChild(slot);
+  }
+  for (let i=0;i<4;i++){
+    const slot=document.createElement('div');
+    slot.className='pile';
+    slot.ondragover=e=>e.preventDefault();
+    slot.ondrop=()=>dropOnFoundation(i);
+    if (gameState.foundations[i].length>0){
+      const top=gameState.foundations[i][gameState.foundations[i].length-1];
+      slot.appendChild(createCardImg(top));
+    }
+    foundDiv.appendChild(slot);
+  }
+  for (let i=0;i<8;i++){
+    const slot=document.createElement('div');
+    slot.className='pile';
+    slot.ondragover=e=>e.preventDefault();
+    slot.ondrop=()=>dropOnTableau(i);
+    gameState.tableau[i].forEach((card,idx)=>{
+      slot.appendChild(createCardImg(card,idx));
+    });
+    tabDiv.appendChild(slot);
+  }
+}
+
+restartGame();
+</script>
 </body>
 </html>
