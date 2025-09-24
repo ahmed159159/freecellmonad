@@ -19,26 +19,10 @@
       width: 800px;
       margin: 10px;
     }
-    #freecells {
-      display: flex;
-      gap: 8px;
-    }
-    #foundations {
-      display: flex;
-      gap: 8px;
-    }
-    #bottom-row {
-      display:flex;
-      justify-content:center;
-      margin:10px;
-      width: 100vw;
-    }
-    #tableau {
-      display: flex;
-      justify-content: center;
-      width: 100vw;
-      gap: 8px;
-    }
+    #freecells { display: flex; gap: 8px; }
+    #foundations { display: flex; gap: 8px; }
+    #bottom-row { display:flex; justify-content:center; margin:10px; width: 100vw; }
+    #tableau { display: flex; justify-content: center; width: 100vw; gap: 8px; }
     .pile {
       width:80px; height:120px;
       border:1px dashed rgba(255,255,255,0.4);
@@ -167,29 +151,39 @@ function validSequence(cards){
   return true;
 }
 
-function countEmptyFreecells(){ return gameState.freecells.filter(f=>!f).length; }
-function countEmptyTableaus(){ return gameState.tableau.filter(p=>p.length===0).length; }
-function maxMovableCards(){ return (countEmptyFreecells()+1)*Math.pow(2,countEmptyTableaus()); }
-
 // ====== Drag & Drop ======
 let draggedCards=[],sourceIdx=null,sourceType=null;
+
 function dragStart(e){
   const id=e.target.dataset.id;
-  // tableau
+  
+  // ====== تحقق من Tableau ======
   for (let i=0;i<8;i++){
     const pile=gameState.tableau[i];
     const idx=pile.findIndex(c=>cardId(c)===id);
     if (idx!==-1){
       const moving=pile.slice(idx);
-      if (moving.length<=maxMovableCards() && validSequence(moving)){
-        draggedCards=moving; sourceIdx=i; sourceType="tableau"; return;
-      } else { draggedCards=[]; return; }
+      if (validSequence(moving)){  // السماح بسحب أي سلسلة صحيحة
+        draggedCards=moving; 
+        sourceIdx=i; 
+        sourceType="tableau"; 
+        return;
+      } else { 
+        draggedCards=[]; 
+        return; 
+      }
     }
   }
-  // freecell
+
+  // ====== تحقق من FreeCells ======
   for (let i=0;i<4;i++){
     const c=gameState.freecells[i];
-    if (c && cardId(c)===id){ draggedCards=[c]; sourceIdx=i; sourceType="freecell"; return; }
+    if (c && cardId(c)===id){
+      draggedCards=[c]; 
+      sourceIdx=i; 
+      sourceType="freecell"; 
+      return;
+    }
   }
 }
 
@@ -240,7 +234,6 @@ function dropOnFoundation(i){
 let lastHint = null;
 function showHint(){
   clearHints();
-  // أولاً: جرب نقل من tableau إلى foundation
   for (let i=0;i<8;i++){
     const pile=gameState.tableau[i];
     if (pile.length>0){
@@ -255,7 +248,6 @@ function showHint(){
       }
     }
   }
-  // ثانياً: جرب نقل من tableau إلى tableau أخرى
   for (let i=0;i<8;i++){
     const pile=gameState.tableau[i];
     if (pile.length>0){
@@ -273,7 +265,6 @@ function showHint(){
       }
     }
   }
-  // ثالثاً: جرب نقل من tableau إلى freecell
   for (let i=0;i<8;i++){
     const pile=gameState.tableau[i];
     if (pile.length>0){
@@ -287,7 +278,6 @@ function showHint(){
       }
     }
   }
-  // رابعاً: لا توجد تلميحات
   lastHint = null;
 }
 
@@ -329,7 +319,6 @@ function render(){
   const tabDiv=document.getElementById('tableau');
   freeDiv.innerHTML=""; foundDiv.innerHTML=""; tabDiv.innerHTML="";
   
-  // freecells
   for (let i=0;i<4;i++){
     const slot=document.createElement('div');
     slot.className='pile';
@@ -338,7 +327,6 @@ function render(){
     if (gameState.freecells[i]) slot.appendChild(createCardImg(gameState.freecells[i]));
     freeDiv.appendChild(slot);
   }
-  // foundations
   for (let i=0;i<4;i++){
     const slot=document.createElement('div');
     slot.className='pile';
@@ -350,7 +338,6 @@ function render(){
     }
     foundDiv.appendChild(slot);
   }
-  // tableau
   for (let i=0;i<8;i++){
     const slot=document.createElement('div');
     slot.className='pile';
