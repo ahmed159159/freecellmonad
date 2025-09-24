@@ -1,54 +1,85 @@
-const suits = ["S", "H", "D", "C"]; // Spades, Hearts, Diamonds, Clubs
+const suits = ["C", "D", "H", "S"];
 const values = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
 
+let deck = [];
 let columns = [[],[],[],[],[],[],[],[]];
-let freeCells = [null,null,null,null];
+let freecells = [null,null,null,null];
 let foundations = [[],[],[],[]];
 let dragging = null;
 
 function createDeck() {
-  let deck = [];
+  deck = [];
   for (let s of suits) {
     for (let v of values) {
-      deck.push({suit: s, value: v});
+      deck.push({value: v, suit: s});
     }
   }
-  return shuffle(deck);
 }
 
 function shuffle(array) {
-  return array.sort(() => Math.random() - 0.5);
+  for (let i = array.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
 }
 
-function deal(deck) {
+function deal() {
   columns = [[],[],[],[],[],[],[],[]];
   let col = 0;
-  while(deck.length) {
-    columns[col].push(deck.pop());
-    col = (col+1)%8;
+  for (let card of deck) {
+    columns[col].push(card);
+    col = (col + 1) % 8;
   }
 }
 
 function render() {
-  const colZone = document.getElementById("columns");
-  colZone.innerHTML = "";
-  columns.forEach((col, i) => {
+  const colsDiv = document.getElementById("columns");
+  colsDiv.innerHTML = "";
+  columns.forEach((col, ci) => {
     const div = document.createElement("div");
     div.className = "column";
-    div.dataset.col = i;
-    col.forEach((card, j) => {
-      const el = document.createElement("div");
-      el.className = "card";
-      el.draggable = true;
-      el.dataset.col = i;
-      el.dataset.index = j;
-
+    col.forEach((card, i) => {
       const img = document.createElement("img");
       img.src = `Cards/${card.value}${card.suit}.jpg`;
-      img.alt = card.value + card.suit;
-      el.appendChild(img);
-
-      el.addEventListener("dragstart", onDragStart);
-      div.appendChild(el);
+      img.className = "card";
+      img.dataset.col = ci;
+      img.dataset.index = i;
+      img.draggable = true;
+      img.addEventListener("dragstart", onDragStart);
+      img.addEventListener("dragend", onDragEnd);
+      div.appendChild(img);
     });
-    div.addEventListener("dragover", e
+    div.addEventListener("dragover", e => e.preventDefault());
+    div.addEventListener("drop", e => onDrop(e, ci));
+    colsDiv.appendChild(div);
+  });
+}
+
+function onDragStart(e) {
+  const col = parseInt(e.target.dataset.col);
+  const index = parseInt(e.target.dataset.index);
+  const stack = columns[col].slice(index);
+
+  // السماح بسحب الاستاك كامل (من غير معادلة معقدة الأول)
+  dragging = {stack, fromCol: col, index};
+}
+
+function onDragEnd() {
+  dragging = null;
+}
+
+function onDrop(e, col) {
+  if (!dragging) return;
+  columns[col] = columns[col].concat(dragging.stack);
+  columns[dragging.fromCol] = columns[dragging.fromCol].slice(0, dragging.index);
+  render();
+}
+
+function restartGame() {
+  createDeck();
+  shuffle(deck);
+  deal();
+  render();
+}
+
+restartGame();
