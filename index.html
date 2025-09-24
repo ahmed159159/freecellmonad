@@ -2,7 +2,7 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>FreeCell -  ويب</title>
+  <title>FreeCell - نسخة ويب</title>
   <style>
     body { background:#064420; color:white; font-family:Arial; margin:0; }
     h1 { text-align:center; margin:10px; }
@@ -26,7 +26,7 @@
   </style>
 </head>
 <body>
-  <h1> FreeCell</h1>
+  <h1>لعبة FreeCell</h1>
   <div id="controls">
     <button onclick="restartGame()">إعادة تشغيل</button>
     <button onclick="undoMove()">تراجع (Undo)</button>
@@ -61,8 +61,12 @@ function createCardImg(card,idx=0,draggable=true){
 }
 
 function initDeck(){
-  let d=[]; for (let r of ranks){ for (let s of suits){ d.push({rank:r,suit:s}); } }
-  for (let i=d.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]]; }
+  let d=[]; 
+  for (let r of ranks){ for (let s of suits){ d.push({rank:r,suit:s}); } }
+  for (let i=d.length-1;i>0;i--){ 
+    const j=Math.floor(Math.random()*(i+1)); 
+    [d[i],d[j]]=[d[j],d[i]]; 
+  }
   return d;
 }
 
@@ -128,8 +132,6 @@ function dropOnTableau(i){
   if (draggedCards.length===0) return;
   const pile=gameState.tableau[i];
   const target=pile[pile.length-1];
-
-  // ✅ تعديل هنا
   if ((pile.length===0 && validSequence(draggedCards)) ||
       (pile.length>0 && canPlaceOn(draggedCards[0],target) && validSequence(draggedCards))) {
     saveState();
@@ -157,4 +159,64 @@ function dropOnFoundation(i){
   if (canPlaceOnFoundation(draggedCards[0],pile)){
     saveState();
     if (sourceType==="tableau"){ gameState.tableau[sourceIdx].pop(); }
-    else if (sourceTy
+    else if (sourceType==="freecell"){ gameState.freecells[sourceIdx]=null; }
+    pile.push(draggedCards[0]);
+    draggedCards=[]; render();
+  }
+}
+
+// Rendering
+function render(){
+  const freeDiv=document.getElementById('freecells');
+  const foundDiv=document.getElementById('foundations');
+  const tabDiv=document.getElementById('tableau');
+  freeDiv.innerHTML=""; foundDiv.innerHTML=""; tabDiv.innerHTML="";
+  for (let i=0;i<4;i++){
+    const slot=document.createElement('div');
+    slot.className="pile"; slot.ondragover=e=>e.preventDefault();
+    slot.ondrop=()=>dropOnFreecell(i);
+    if (gameState.freecells[i]) slot.appendChild(createCardImg(gameState.freecells[i]));
+    freeDiv.appendChild(slot);
+  }
+  for (let i=0;i<4;i++){
+    const slot=document.createElement('div');
+    slot.className="pile"; slot.ondragover=e=>e.preventDefault();
+    slot.ondrop=()=>dropOnFoundation(i);
+    if (gameState.foundations[i].length>0){
+      const top=gameState.foundations[i][gameState.foundations[i].length-1];
+      slot.appendChild(createCardImg(top));
+    }
+    foundDiv.appendChild(slot);
+  }
+  for (let i=0;i<8;i++){
+    const slot=document.createElement('div');
+    slot.className="pile"; slot.ondragover=e=>e.preventDefault();
+    slot.ondrop=()=>dropOnTableau(i);
+    gameState.tableau[i].forEach((card,idx)=>{
+      slot.appendChild(createCardImg(card,idx));
+    });
+    tabDiv.appendChild(slot);
+  }
+}
+
+// Hint
+function showHint(){
+  for (let i=0;i<8;i++){
+    const pile=gameState.tableau[i];
+    if (pile.length>0){
+      const c=pile[pile.length-1];
+      for (let j=0;j<4;j++){
+        if (canPlaceOnFoundation(c,gameState.foundations[j])){
+          alert("يمكن نقل "+cardId(c)+" إلى الـ Foundation "+(j+1));
+          return;
+        }
+      }
+    }
+  }
+  alert("لا توجد تلميحات متاحة");
+}
+
+restartGame();
+</script>
+</body>
+</html>
