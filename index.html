@@ -42,8 +42,7 @@
       border-radius:6px; 
       pointer-events:none;
     }
-    /* تمييز الهنت */
-    .hint {
+    .hint-glow {
       box-shadow: 0 0 15px 5px yellow;
       z-index: 10;
     }
@@ -239,64 +238,7 @@ function dropOnFoundation(i){
   }
 }
 
-/* ---------------- HINT ---------------- */
-function clearHints(){
-  document.querySelectorAll('.card').forEach(c => c.classList.remove('hint'));
-  document.querySelectorAll('.pile').forEach(p => p.classList.remove('hint'));
-}
-
-function showHint(){
-  clearHints();
-
-  // لف على كل الكروت في التابلـو
-  for (let i=0;i<8;i++){
-    const pile = gameState.tableau[i];
-    if (pile.length === 0) continue;
-    const card = pile[pile.length-1]; // الكارت اللي فوق
-
-    // جرب تحطه في أساسات
-    for (let f=0;f<4;f++){
-      if (canPlaceOnFoundation(card, gameState.foundations[f])){
-        highlight(cardId(card), "foundation", f);
-        return;
-      }
-    }
-    // جرب تحطه في فري سيل
-    for (let f=0;f<4;f++){
-      if (!gameState.freecells[f]){
-        highlight(cardId(card), "freecell", f);
-        return;
-      }
-    }
-    // جرب تحطه على تابلـو تاني
-    for (let j=0;j<8;j++){
-      if (i===j) continue;
-      const target = gameState.tableau[j][gameState.tableau[j].length-1];
-      if ((target && canPlaceOn(card,target)) || (!target)){
-        highlight(cardId(card), "tableau", j);
-        return;
-      }
-    }
-  }
-}
-
-function highlight(cardIdStr, targetType, idx){
-  // الكارت
-  const el = document.querySelector(`[data-id='${cardIdStr}']`);
-  if (el) el.classList.add('hint');
-
-  // الهدف
-  let targetEl;
-  if (targetType==="foundation") targetEl = document.querySelectorAll("#foundations .pile")[idx];
-  if (targetType==="freecell") targetEl = document.querySelectorAll("#freecells .pile")[idx];
-  if (targetType==="tableau") targetEl = document.querySelectorAll("#tableau .pile")[idx];
-  
-  if (targetEl) targetEl.classList.add('hint');
-}
-/* ---------------- END HINT ---------------- */
-
 function render(){
-  clearHints();
   const freeDiv = document.getElementById('freecells');
   const foundDiv = document.getElementById('foundations');
   const tabDiv = document.getElementById('tableau');
@@ -333,6 +275,60 @@ function render(){
       slot.appendChild(createCardImg(card, idx));
     });
     tabDiv.appendChild(slot);
+  }
+}
+
+// -------- HINT SYSTEM --------
+function clearHints(){
+  document.querySelectorAll('.hint-glow').forEach(el=>{
+    el.classList.remove('hint-glow');
+  });
+}
+function highlight(cardIdStr, type, idx){
+  // الكارت
+  const el = document.querySelector(`[data-id="${cardIdStr}"]`);
+  if (el) el.classList.add("hint-glow");
+
+  // المكان الهدف
+  let targetEls;
+  if (type==="tableau"){
+    targetEls = document.querySelectorAll('#tableau .pile')[idx];
+  } else if (type==="freecell"){
+    targetEls = document.querySelectorAll('#freecells .pile')[idx];
+  } else if (type==="foundation"){
+    targetEls = document.querySelectorAll('#foundations .pile')[idx];
+  }
+  if (targetEls) targetEls.classList.add("hint-glow");
+}
+
+function showHint(){
+  clearHints();
+  // لف على كل الأعمدة
+  for (let i=0;i<8;i++){
+    const pile = gameState.tableau[i];
+    if (pile.length === 0) continue;
+    const card = pile[pile.length-1]; // آخر كارت
+
+    // الأساسات
+    for (let f=0;f<4;f++){
+      if (canPlaceOnFoundation(card, gameState.foundations[f])){
+        highlight(cardId(card), "foundation", f);
+      }
+    }
+    // الفري سيل
+    for (let f=0;f<4;f++){
+      if (!gameState.freecells[f]){
+        highlight(cardId(card), "freecell", f);
+      }
+    }
+    // التابلـو
+    for (let j=0;j<8;j++){
+      if (i===j) continue;
+      const target = gameState.tableau[j][gameState.tableau[j].length-1];
+      if ((target && canPlaceOn(card,target)) || (!target)){
+        highlight(cardId(card), "tableau", j);
+      }
+    }
   }
 }
 
