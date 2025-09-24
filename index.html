@@ -26,7 +26,7 @@
   </style>
 </head>
 <body>
-  <h1>لعبة FreeCell</h1>
+  <h1>FreeCell</h1>
   <div id="controls">
     <button onclick="restartGame()">إعادة تشغيل</button>
     <button onclick="undoMove()">تراجع (Undo)</button>
@@ -61,11 +61,11 @@ function createCardImg(card,idx=0,draggable=true){
 }
 
 function initDeck(){
-  let d=[]; 
+  let d=[];
   for (let r of ranks){ for (let s of suits){ d.push({rank:r,suit:s}); } }
-  for (let i=d.length-1;i>0;i--){ 
-    const j=Math.floor(Math.random()*(i+1)); 
-    [d[i],d[j]]=[d[j],d[i]]; 
+  for (let i=d.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [d[i],d[j]]=[d[j],d[i]];
   }
   return d;
 }
@@ -132,6 +132,7 @@ function dropOnTableau(i){
   if (draggedCards.length===0) return;
   const pile=gameState.tableau[i];
   const target=pile[pile.length-1];
+
   if ((pile.length===0 && validSequence(draggedCards)) ||
       (pile.length>0 && canPlaceOn(draggedCards[0],target) && validSequence(draggedCards))) {
     saveState();
@@ -160,60 +161,44 @@ function dropOnFoundation(i){
     saveState();
     if (sourceType==="tableau"){ gameState.tableau[sourceIdx].pop(); }
     else if (sourceType==="freecell"){ gameState.freecells[sourceIdx]=null; }
-    pile.push(draggedCards[0]);
+    gameState.foundations[i].push(draggedCards[0]);
     draggedCards=[]; render();
   }
 }
 
-// Rendering
 function render(){
-  const freeDiv=document.getElementById('freecells');
-  const foundDiv=document.getElementById('foundations');
-  const tabDiv=document.getElementById('tableau');
-  freeDiv.innerHTML=""; foundDiv.innerHTML=""; tabDiv.innerHTML="";
+  const free=document.getElementById('freecells');
+  const found=document.getElementById('foundations');
+  const tab=document.getElementById('tableau');
+  free.innerHTML=""; found.innerHTML=""; tab.innerHTML="";
   for (let i=0;i<4;i++){
-    const slot=document.createElement('div');
-    slot.className="pile"; slot.ondragover=e=>e.preventDefault();
-    slot.ondrop=()=>dropOnFreecell(i);
-    if (gameState.freecells[i]) slot.appendChild(createCardImg(gameState.freecells[i]));
-    freeDiv.appendChild(slot);
+    const p=document.createElement('div'); p.className='pile';
+    p.ondragover=e=>e.preventDefault();
+    p.ondrop=()=>dropOnFreecell(i);
+    if (gameState.freecells[i]) p.appendChild(createCardImg(gameState.freecells[i]));
+    free.appendChild(p);
   }
   for (let i=0;i<4;i++){
-    const slot=document.createElement('div');
-    slot.className="pile"; slot.ondragover=e=>e.preventDefault();
-    slot.ondrop=()=>dropOnFoundation(i);
+    const p=document.createElement('div'); p.className='pile';
+    p.ondragover=e=>e.preventDefault();
+    p.ondrop=()=>dropOnFoundation(i);
     if (gameState.foundations[i].length>0){
-      const top=gameState.foundations[i][gameState.foundations[i].length-1];
-      slot.appendChild(createCardImg(top));
+      const c=gameState.foundations[i][gameState.foundations[i].length-1];
+      p.appendChild(createCardImg(c));
     }
-    foundDiv.appendChild(slot);
+    found.appendChild(p);
   }
   for (let i=0;i<8;i++){
-    const slot=document.createElement('div');
-    slot.className="pile"; slot.ondragover=e=>e.preventDefault();
-    slot.ondrop=()=>dropOnTableau(i);
-    gameState.tableau[i].forEach((card,idx)=>{
-      slot.appendChild(createCardImg(card,idx));
-    });
-    tabDiv.appendChild(slot);
+    const p=document.createElement('div'); p.className='pile';
+    p.ondragover=e=>e.preventDefault();
+    p.ondrop=()=>dropOnTableau(i);
+    gameState.tableau[i].forEach((c,idx)=>{ p.appendChild(createCardImg(c,idx)); });
+    tab.appendChild(p);
   }
 }
 
-// Hint
 function showHint(){
-  for (let i=0;i<8;i++){
-    const pile=gameState.tableau[i];
-    if (pile.length>0){
-      const c=pile[pile.length-1];
-      for (let j=0;j<4;j++){
-        if (canPlaceOnFoundation(c,gameState.foundations[j])){
-          alert("يمكن نقل "+cardId(c)+" إلى الـ Foundation "+(j+1));
-          return;
-        }
-      }
-    }
-  }
-  alert("لا توجد تلميحات متاحة");
+  alert("Hint: حاول تحط الكروت على الأساسات (A ثم 2 ثم 3...) أو حرك كارت فوق المخالف في اللون وأقل برتبة.");
 }
 
 restartGame();
