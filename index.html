@@ -285,47 +285,50 @@ function clearHints(){
   });
 }
 function highlight(cardIdStr, type, idx){
-  // الكارت
   const el = document.querySelector(`[data-id="${cardIdStr}"]`);
   if (el) el.classList.add("hint-glow");
 
-  // المكان الهدف
-  let targetEls;
+  let targetEl;
   if (type==="tableau"){
-    targetEls = document.querySelectorAll('#tableau .pile')[idx];
+    targetEl = document.querySelectorAll('#tableau .pile')[idx];
   } else if (type==="freecell"){
-    targetEls = document.querySelectorAll('#freecells .pile')[idx];
+    targetEl = document.querySelectorAll('#freecells .pile')[idx];
   } else if (type==="foundation"){
-    targetEls = document.querySelectorAll('#foundations .pile')[idx];
+    targetEl = document.querySelectorAll('#foundations .pile')[idx];
   }
-  if (targetEls) targetEls.classList.add("hint-glow");
+  if (targetEl) targetEl.classList.add("hint-glow");
 }
 
 function showHint(){
   clearHints();
+  
   // لف على كل الأعمدة
-  for (let i=0;i<8;i++){
+  for (let i=0; i<8; i++){
     const pile = gameState.tableau[i];
     if (pile.length === 0) continue;
-    const card = pile[pile.length-1]; // آخر كارت
+    
+    const card = pile[pile.length - 1]; // آخر كارت في العمود الحالي
 
     // الأساسات
-    for (let f=0;f<4;f++){
+    for (let f=0; f<4; f++){
       if (canPlaceOnFoundation(card, gameState.foundations[f])){
         highlight(cardId(card), "foundation", f);
       }
     }
+
     // الفري سيل
-    for (let f=0;f<4;f++){
+    for (let f=0; f<4; f++){
       if (!gameState.freecells[f]){
         highlight(cardId(card), "freecell", f);
       }
     }
-    // التابلـو
-    for (let j=0;j<8;j++){
-      if (i===j) continue;
-      const target = gameState.tableau[j][gameState.tableau[j].length-1];
-      if ((target && canPlaceOn(card,target)) || (!target)){
+
+    // التابلـو (أي عمود تاني ممكن ينزل فيه)
+    for (let j=0; j<8; j++){
+      if (i === j) continue;
+      const targetPile = gameState.tableau[j];
+      const targetCard = targetPile[targetPile.length - 1];
+      if ((targetCard && canPlaceOn(card, targetCard)) || targetPile.length === 0){
         highlight(cardId(card), "tableau", j);
       }
     }
