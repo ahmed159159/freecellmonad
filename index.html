@@ -43,7 +43,7 @@
       pointer-events:none;
     }
     .hint-glow {
-      box-shadow: 0 0 15px 5px purple; /* لون الهنت بنفسجي */
+      box-shadow: 0 0 15px 5px purple;
       z-index: 10;
     }
   </style>
@@ -256,4 +256,77 @@ function render(){
   }
 
   for (let i=0;i<4;i++){
-    const slot
+    const slot = document.createElement('div');
+    slot.className = 'pile';
+    slot.ondragover = e => e.preventDefault();
+    slot.ondrop = () => dropOnFoundation(i);
+    if (gameState.foundations[i].length > 0){
+      slot.appendChild(createCardImg(gameState.foundations[i].slice(-1)[0],0));
+    }
+    foundDiv.appendChild(slot);
+  }
+
+  for (let i=0;i<8;i++){
+    const slot = document.createElement('div');
+    slot.className = 'pile';
+    slot.ondragover = e => e.preventDefault();
+    slot.ondrop = () => dropOnTableau(i);
+    gameState.tableau[i].forEach((card, idx) => {
+      slot.appendChild(createCardImg(card, idx));
+    });
+    tabDiv.appendChild(slot);
+  }
+}
+
+// -------- HINT SYSTEM --------
+function clearHints(){
+  document.querySelectorAll('.hint-glow').forEach(el=>{
+    el.classList.remove('hint-glow');
+  });
+}
+function highlight(cardIdStr, type, idx){
+  const el = document.querySelector(`[data-id="${cardIdStr}"]`);
+  if (el) el.classList.add("hint-glow");
+
+  let targetEl;
+  if (type==="tableau"){
+    targetEl = document.querySelectorAll('#tableau .pile')[idx];
+  }
+  if (targetEl) targetEl.classList.add("hint-glow");
+}
+
+// ---------- HINT MODIFIED FOR SEQUENCES ----------
+function showHint(){
+  clearHints();
+
+  for (let i = 0; i < 8; i++){
+    const pile = gameState.tableau[i];
+    if (pile.length === 0) continue;
+
+    // نفحص كل السلاسل الممكنة داخل العمود
+    for (let startIdx = 0; startIdx < pile.length; startIdx++){
+      const moving = pile.slice(startIdx);
+      if (!validSequence(moving)) continue;
+
+      const maxAllowed = maxMovableCards(i);
+      if (moving.length > maxAllowed) continue;
+
+      // لف على الأعمدة التانية اللي فيها كارت فقط
+      for (let j = 0; j < 8; j++){
+        if (i === j) continue;
+        const targetPile = gameState.tableau[j];
+        if (targetPile.length === 0) continue; // نتجاهل الأعمدة الفارغة
+        const targetCard = targetPile[targetPile.length - 1];
+
+        if (canPlaceOn(moving[0], targetCard)){
+          highlight(cardId(moving[0]), "tableau", j);
+        }
+      }
+    }
+  }
+}
+
+restartGame();
+</script>
+</body>
+</html>
