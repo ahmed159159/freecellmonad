@@ -71,9 +71,11 @@ const suits = ["S","H","D","C"];
 let gameState = {
   tableau:[[],[],[],[],[],[],[],[]],
   freecells:[null,null,null,null],
-  foundations:[[],[],[],[]],
-  history:[]
+  foundations:[[],[],[],[]]
 };
+
+// ----------------- آخر حركة فقط -----------------
+let lastMove = null; // لتخزين آخر حركة فقط
 
 function cardId(c){ return c.rank + c.suit; }
 function cardColor(s){ return (s==="H"||s==="D") ? "red" : "black"; }
@@ -118,20 +120,47 @@ function restartGame(){
   for (let i=0;i<deck.length;i++) gameState.tableau[i % 8].push(deck[i]);
   gameState.freecells = [null,null,null,null];
   gameState.foundations = [[],[],[],[]];
-  gameState.history = [];
+  lastMove = null;
   render();
 }
 
-function saveState(){
-  gameState.history.push(JSON.parse(JSON.stringify(gameState)));
-}
-function undoMove(){
-  if (gameState.history.length>0){
-    gameState = JSON.parse(JSON.stringify(gameState.history.pop()));
-    render();
-  }
+// --------- حفظ آخر حركة فقط ---------
+function saveState() {
+  lastMove = {
+    sourceType,
+    sourceIdx,
+    targetType: null, 
+    targetIdx: null,
+    cards: JSON.parse(JSON.stringify(draggedCards))
+  };
 }
 
+function undoMove() {
+  if (!lastMove) return;
+
+  const { sourceType, sourceIdx, targetType, targetIdx, cards } = lastMove;
+
+  // إزالة الكروت من الهدف
+  if (targetType === "tableau") {
+    gameState.tableau[targetIdx].splice(-cards.length);
+  } else if (targetType === "freecell") {
+    gameState.freecells[targetIdx] = null;
+  } else if (targetType === "foundation") {
+    gameState.foundations[targetIdx].pop();
+  }
+
+  // إرجاع الكروت للمصدر
+  if (sourceType === "tableau") {
+    gameState.tableau[sourceIdx] = gameState.tableau[sourceIdx].concat(cards);
+  } else if (sourceType === "freecell") {
+    gameState.freecells[sourceIdx] = cards[0];
+  }
+
+  lastMove = null; // تفريغ الحركة بعد Undo
+  render();
+}
+
+// --------- شروط اللعب ---------
 function canPlaceOn(card, target){
   if (!target) return true;
   const ri = ranks.indexOf(card.rank);
@@ -151,6 +180,7 @@ function validSequence(cards){
   return true;
 }
 
+// --------- Drag & Drop ---------
 let draggedCards = [];
 let sourceIdx = null;
 let sourceType = null;
@@ -194,6 +224,7 @@ function dragEnd(e){
   sourceType = null;
 }
 
+// --------- عمليات النقل مع تسجيل الهدف ---------
 function dropOnTableau(i){
   if (draggedCards.length === 0) return;
   const pile = gameState.tableau[i];
@@ -210,10 +241,17 @@ function dropOnTableau(i){
       gameState.freecells[sourceIdx] = null;
     }
     gameState.tableau[i] = gameState.tableau[i].concat(draggedCards);
+
+    if (lastMove) {
+      lastMove.targetType = "tableau";
+      lastMove.targetIdx = i;
+    }
+
     draggedCards = [];
     render();
   }
 }
+
 function dropOnFreecell(i){
   if (draggedCards.length !== 1) return;
   if (!gameState.freecells[i]){
@@ -221,10 +259,17 @@ function dropOnFreecell(i){
     if (sourceType === "tableau") gameState.tableau[sourceIdx].pop();
     else if (sourceType === "freecell") return;
     gameState.freecells[i] = draggedCards[0];
+
+    if (lastMove) {
+      lastMove.targetType = "freecell";
+      lastMove.targetIdx = i;
+    }
+
     draggedCards = [];
     render();
   }
 }
+
 function dropOnFoundation(i){
   if (draggedCards.length !== 1) return;
   const pile = gameState.foundations[i];
@@ -233,11 +278,18 @@ function dropOnFoundation(i){
     if (sourceType === "tableau") gameState.tableau[sourceIdx].pop();
     else if (sourceType === "freecell") gameState.freecells[sourceIdx] = null;
     gameState.foundations[i].push(draggedCards[0]);
+
+    if (lastMove) {
+      lastMove.targetType = "foundation";
+      lastMove.targetIdx = i;
+    }
+
     draggedCards = [];
     render();
   }
 }
 
+// --------- Render ---------
 function render(){
   const freeDiv = document.getElementById('freecells');
   const foundDiv = document.getElementById('foundations');
@@ -295,29 +347,21 @@ function highlight(cardIdStr, type, idx){
   if (targetEl) targetEl.classList.add("hint-glow");
 }
 
-// ---------- HINT MODIFIED FOR SEQUENCES ----------
 function showHint(){
   clearHints();
-
   for (let i = 0; i < 8; i++){
     const pile = gameState.tableau[i];
     if (pile.length === 0) continue;
-
-    // نفحص كل السلاسل الممكنة داخل العمود
     for (let startIdx = 0; startIdx < pile.length; startIdx++){
       const moving = pile.slice(startIdx);
       if (!validSequence(moving)) continue;
-
       const maxAllowed = maxMovableCards(i);
       if (moving.length > maxAllowed) continue;
-
-      // لف على الأعمدة التانية اللي فيها كارت فقط
       for (let j = 0; j < 8; j++){
         if (i === j) continue;
         const targetPile = gameState.tableau[j];
-        if (targetPile.length === 0) continue; // نتجاهل الأعمدة الفارغة
+        if (targetPile.length === 0) continue;
         const targetCard = targetPile[targetPile.length - 1];
-
         if (canPlaceOn(moving[0], targetCard)){
           highlight(cardId(moving[0]), "tableau", j);
         }
